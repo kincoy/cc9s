@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Build binaries
+        run: |
+          # macOS amd64
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o cc9s-darwin-amd64 .
+          # macOS arm64 (Apple Silicon)
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o cc9s-darwin-arm64 .
+          # Linux amd64
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o cc9s-linux-amd64 .
+          # Linux arm64
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o cc9s-linux-arm64 .
+
+      - name: Generate checksums
+        run: sha256sum cc9s-* > checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            cc9s-darwin-amd64
+            cc9s-darwin-arm64
+            cc9s-linux-amd64
+            cc9s-linux-arm64
+            checksums.txt

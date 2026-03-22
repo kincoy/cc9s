@@ -1,0 +1,18 @@
+# IDE
+.idea/
+
+# Build output
+cc9s
+
+# OS
+.DS_Store
+
+# Claude Code agent files
+.claude/
+CLAUDE.md
+
+# Specify templates
+.specify/
+
+# Specs
+specs/
