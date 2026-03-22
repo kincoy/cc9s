@@ -1,0 +1,193 @@
+<h1 align="center">cc9s</h1>
+
+<p align="center">
+  <strong>类似 k9s 风格的 Claude Code 会话管理终端工具</strong>
+</p>
+
+<p align="center">
+  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go" alt="Go version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
+  <a href="https://github.com/kincoy/cc9s/releases"><img src="https://img.shields.io/badge/Release-v0.1.0-green.svg" alt="Release"></a>
+</p>
+
+<p align="center">
+    <a href="README.md">English</a> | 简体中文
+</p>
+
+---
+
+## 为什么需要 cc9s？
+
+Claude Code 将会话数据以 JSONL 文件存储在 `~/.claude/` 下。当你在几十个项目中积累了数百个会话后，查找和管理它们变得非常困难。
+
+cc9s 提供了一个全屏终端 UI（灵感来自 [k9s](https://github.com/derailed/k9s)），让你无需离开键盘即可浏览、搜索、查看和恢复会话。
+
+## 功能
+
+- **双层导航** — Projects → Sessions，`Enter` 进入，`Esc` 返回
+- **会话恢复** — 直接从 TUI 启动对应的 Claude Code 会话
+- **搜索与过滤** — `/` 搜索，`:context <name>` 按项目过滤
+- **多选批量删除** — `Space` 选中，`d` 批量删除
+- **会话详情** — 查看会话统计、摘要和工具调用日志
+- **Tab 补全** — 自动补全命令和项目名
+- **完全键盘驱动** — 无需鼠标
+
+## 截图
+
+**项目列表** — 浏览所有 Claude Code 项目
+
+<p align="center">
+  <img src="assets/projects.jpg" alt="项目列表" width="720">
+</p>
+
+**搜索** — 按 `/` 实时搜索会话
+
+<p align="center">
+  <img src="assets/search.jpg" alt="搜索" width="720">
+</p>
+
+**全部会话** — 查看所有项目下的会话
+
+<p align="center">
+  <img src="assets/session-all.jpg" alt="全部会话" width="720">
+</p>
+
+**项目会话** — 按项目上下文筛选会话
+
+<p align="center">
+  <img src="assets/session-specify.jpg" alt="项目会话" width="720">
+</p>
+
+**会话详情** — 按 `d` 查看统计、摘要和工具使用
+
+<p align="center">
+  <img src="assets/d-description.jpg" alt="会话详情" width="720">
+</p>
+
+**会话日志** — 按 `l` 浏览对话轮次
+
+<p align="center">
+  <img src="assets/l-logs.jpg" alt="会话日志" width="720">
+</p>
+
+**命令模式** — 按 `:` 输入命令，支持 Tab 补全
+
+<p align="center">
+  <img src="assets/command.jpg" alt="命令模式" width="720">
+</p>
+
+## 快速开始
+
+### 环境要求
+
+- Go 1.25+
+- 已安装 Claude Code（会话数据读取自 `~/.claude/`）
+- macOS / Linux（建议使用支持真彩色的终端）
+
+### 安装
+
+**Homebrew（macOS / Linux）：**
+
+```bash
+brew tap kincoy/tap
+brew install cc9s
+```
+
+**Go install：**
+
+```bash
+go install github.com/kincoy/cc9s@latest
+```
+
+**从源码构建：**
+
+```bash
+git clone https://github.com/kincoy/cc9s.git
+cd cc9s
+go build -o cc9s .
+```
+
+### 运行
+
+```bash
+cc9s
+```
+
+首次启动时，cc9s 会扫描 `~/.claude/projects/` 目录。如果会话很多，首次加载可能需要几秒。
+
+## 快捷键
+
+### 导航
+
+| 按键 | 操作 |
+|------|------|
+| `j` / `↓` | 向下移动 |
+| `k` / `↑` | 向上移动 |
+| `g` | 跳到顶部 |
+| `G` | 跳到底部 |
+| `Enter` | 选择 / 进入 |
+| `Esc` | 返回 / 取消 |
+| `q` | 退出 |
+
+### 操作
+
+| 按键 | 操作 |
+|------|------|
+| `/` | 搜索会话 |
+| `s` | 切换排序方式 |
+| `d` | 删除选中会话 |
+| `e` | 查看会话详情 |
+| `l` | 查看会话日志 |
+| `0` | 切换到"全部项目"上下文 |
+| `?` | 帮助面板 |
+
+### 命令模式
+
+输入 `:` 进入命令模式。按 `Tab` 自动补全。
+
+| 命令 | 说明 |
+|------|------|
+| `:context all` | 显示所有项目的会话 |
+| `:context <名称>` | 按项目名过滤会话 |
+| `:q` | 退出 |
+
+## 工作原理
+
+```
+~/.claude/
+├── projects/
+│   ├── <编码后的项目路径>/
+│   │   ├── *.jsonl          # 会话数据（对话历史）
+│   │   └── sessions/        # 活跃会话标记
+│   │       └── <pid>.json
+│   └── ...
+└── sessions/                 # 全局活跃会话索引
+```
+
+cc9s 读取 `~/.claude/projects/` 下的 JSONL 文件并在 TUI 中展示。它 **不会** 修改任何 Claude Code 数据 — 删除操作需要明确确认。
+
+## 技术栈
+
+- [Go](https://go.dev/) — 开发语言
+- [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) — TUI 框架
+- [Lip Gloss v2](https://github.com/charmbracelet/lipgloss) — 样式与布局
+
+## 贡献
+
+欢迎贡献！请随时提交 Pull Request。
+
+1. Fork 本仓库
+2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
+3. 提交更改 (`git commit -m 'feat: add amazing feature'`)
+4. 推送分支 (`git push origin feature/amazing-feature`)
+5. 发起 Pull Request
+
+## 许可证
+
+[MIT](LICENSE)
+
+---
+
+<p align="center">
+  Built with ❤️ by <a href="https://github.com/kincoy">kincoy</a>
+</p>
