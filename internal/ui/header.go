@@ -31,7 +31,7 @@ func renderHeaderWithFilter(width int, contextLabel, stats string, filteredCount
 			Render(content)
 	}
 
-	logo := styles.TitleStyle.Render("cc9s v0.1.0")
+	logo := styles.TitleStyle.Render("cc9s v0.1.1")
 	statsRendered := styles.NormalStyle.Render(fmt.Sprintf("%s / %s", contextLabel, statsLabel))
 	clock := styles.DimStyle.Render(time.Now().Format("15:04:05"))
 	sep := styles.DimStyle.Render(" │ ")
