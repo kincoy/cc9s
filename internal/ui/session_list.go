@@ -25,16 +25,18 @@ const (
 
 // SessionListModel session list view Model (unified, supports context filtering)
 type SessionListModel struct {
-	context      Context              // current filter context
-	sessions     []claudefs.GlobalSession // currently displayed session list (after context + search filtering)
-	allSessions  []claudefs.GlobalSession // complete session list (load source)
-	contextSessions []claudefs.GlobalSession // context-filtered results (search filter source)
-	filterQuery  string               // current search query
-	cursor       int
-	selectedRows map[int]struct{}
-	loading      bool
-	sortBy       SessionSortField
-	sortAsc      bool
+	context          Context                  // current filter context
+	sessions         []claudefs.GlobalSession // currently displayed session list (after context + search filtering)
+	allSessions      []claudefs.GlobalSession // complete session list (load source)
+	contextSessions  []claudefs.GlobalSession // context-filtered results (search filter source)
+	filterQuery      string                   // current search query
+	cursor           int
+	selectedRows     map[int]struct{}
+	loading          bool
+	sortBy           SessionSortField
+	sortAsc          bool
+	restoreSessionID string
+	restoreCursor    int
 }
 
 // sessionsLoadedMsg session data loaded message
@@ -99,9 +101,7 @@ func (m *SessionListModel) Update(msg tea.Msg) tea.Cmd {
 			m.allSessions = msg.sessions
 			m.sortGlobalSessions(m.allSessions)
 			m.applyContext()
-			if len(m.sessions) > 0 {
-				m.cursor = 0
-			}
+			m.restoreCursorAfterReload()
 		}
 
 	case tea.KeyPressMsg:
@@ -137,7 +137,7 @@ func (m *SessionListModel) Update(msg tea.Msg) tea.Cmd {
 			if len(m.sessions) > 0 {
 				gs := m.sessions[m.cursor]
 
-				if gs.Session.IsActive {
+				if gs.Session.Lifecycle.State == claudefs.SessionLifecycleActive {
 					projectName := gs.ProjectName
 					if projectName == "" {
 						projectName = "unknown"
@@ -233,7 +233,41 @@ func (m *SessionListModel) View(width, height int) string {
 
 // Reload reloads all session data
 func (m *SessionListModel) Reload() tea.Cmd {
+	m.captureCursorForReload()
 	return loadAllSessionsCmd()
+}
+
+func (m *SessionListModel) captureCursorForReload() {
+	m.restoreSessionID = ""
+	m.restoreCursor = m.cursor
+
+	if m.cursor >= 0 && m.cursor < len(m.sessions) {
+		m.restoreSessionID = m.sessions[m.cursor].Session.ID
+	}
+}
+
+func (m *SessionListModel) restoreCursorAfterReload() {
+	defer func() {
+		m.restoreSessionID = ""
+		m.restoreCursor = 0
+	}()
+
+	if len(m.sessions) == 0 {
+		m.cursor = 0
+		return
+	}
+
+	if m.restoreSessionID != "" {
+		for i, gs := range m.sessions {
+			if gs.Session.ID == m.restoreSessionID {
+				m.cursor = i
+				return
+			}
+		}
+	}
+
+	m.cursor = m.restoreCursor
+	m.clampCursor()
 }
 
 // applyContext filters allSessions by context -> contextSessions -> sessions
@@ -261,7 +295,7 @@ func (m *SessionListModel) applySearchFilter() {
 		return
 	}
 
-	q := strings.ToLower(m.filterQuery)
+	q := normalizeSearchQuery(m.filterQuery)
 	var filtered []claudefs.GlobalSession
 	for _, gs := range m.contextSessions {
 		if m.matchesFilter(gs, q) {
@@ -270,6 +304,26 @@ func (m *SessionListModel) applySearchFilter() {
 	}
 	m.sessions = filtered
 	m.clampCursor()
+}
+
+func normalizeSearchQuery(query string) string {
+	q := strings.TrimSpace(strings.ToLower(query))
+	q = strings.TrimPrefix(q, "/")
+	return strings.TrimSpace(q)
+}
+
+func queryLooksLikeLifecycleState(query string) bool {
+	if query == "" {
+		return false
+	}
+
+	for _, state := range []string{"active", "idle", "completed", "stale"} {
+		if strings.HasPrefix(state, query) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // ApplyFilter sets search query and re-filters
@@ -285,6 +339,11 @@ func (m *SessionListModel) ApplyFilter(query string) {
 // matchesFilter checks if a GlobalSession matches the search query
 func (m *SessionListModel) matchesFilter(gs claudefs.GlobalSession, q string) bool {
 	s := gs.Session
+
+	if queryLooksLikeLifecycleState(q) {
+		return claudefs.LifecycleStateMatchesQuery(s.Lifecycle.State, q)
+	}
+
 	if strings.Contains(strings.ToLower(s.ID), q) {
 		return true
 	}
@@ -294,10 +353,10 @@ func (m *SessionListModel) matchesFilter(gs claudefs.GlobalSession, q string) bo
 	if strings.Contains(strings.ToLower(s.ProjectPath), q) {
 		return true
 	}
-	if s.IsActive && strings.Contains("active", q) {
+	if claudefs.LifecycleStateMatchesQuery(s.Lifecycle.State, q) {
 		return true
 	}
-	if !s.IsActive && strings.Contains("completed", q) {
+	if strings.Contains(strings.ToLower(strings.Join(s.Lifecycle.Evidence.Reasons, " ")), q) {
 		return true
 	}
 	return false
@@ -399,7 +458,7 @@ func (m *SessionListModel) deleteSelectedCmd() tea.Cmd {
 	// Check for active sessions
 	var activeNames []string
 	for _, gs := range sessions {
-		if gs.Session.IsActive {
+		if gs.Session.Lifecycle.State == claudefs.SessionLifecycleActive {
 			name := gs.ProjectName + "/" + claudefs.FormatSessionID(gs.Session.ID, 8)
 			activeNames = append(activeNames, name)
 		}
@@ -422,9 +481,10 @@ func (m *SessionListModel) deleteSelectedCmd() tea.Cmd {
 	var targets []claudefs.DeleteTarget
 	for _, gs := range sessions {
 		targets = append(targets, claudefs.DeleteTarget{
-			SessionID:   gs.Session.ID,
-			EncodedPath: gs.Session.EncodedPath,
-			IsActive:    gs.Session.IsActive,
+			SessionID:       gs.Session.ID,
+			EncodedPath:     gs.Session.EncodedPath,
+			HasActiveMarker: gs.Session.HasActiveMarker,
+			IsActive:        gs.Session.Lifecycle.State == claudefs.SessionLifecycleActive,
 		})
 	}
 
@@ -449,26 +509,26 @@ func (m *SessionListModel) deleteSelectedCmd() tea.Cmd {
 // loadAllSessionsCmd asynchronously loads sessions from all projects
 func loadAllSessionsCmd() tea.Cmd {
 	return func() tea.Msg {
-	result := claudefs.ScanProjects()
-	if result.Err != nil {
-		return sessionsLoadedMsg{err: result.Err}
-	}
+		result := claudefs.ScanProjects()
+		if result.Err != nil {
+			return sessionsLoadedMsg{err: result.Err}
+		}
 
-	var sessions []claudefs.GlobalSession
-	for _, proj := range result.Projects {
-		projSessions, err := claudefs.LoadProjectSessions(proj.EncodedPath)
-		if err != nil {
-			log.Printf("skip project %s: %v", proj.Name, err)
-			continue
+		var sessions []claudefs.GlobalSession
+		for _, proj := range result.Projects {
+			projSessions, err := claudefs.LoadProjectSessions(proj.EncodedPath)
+			if err != nil {
+				log.Printf("skip project %s: %v", proj.Name, err)
+				continue
+			}
+			for _, s := range projSessions {
+				sessions = append(sessions, claudefs.GlobalSession{
+					Session:     s,
+					ProjectName: proj.Name,
+				})
+			}
 		}
-		for _, s := range projSessions {
-			sessions = append(sessions, claudefs.GlobalSession{
-				Session:     s,
-				ProjectName: proj.Name,
-			})
-		}
-	}
-	return sessionsLoadedMsg{sessions: sessions}
+		return sessionsLoadedMsg{sessions: sessions}
 	}
 }
 

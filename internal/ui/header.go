@@ -8,22 +8,20 @@ import (
 	"github.com/kincoy/cc9s/internal/ui/styles"
 )
 
-func renderHeader(width int, contextLabel string, totalSessions, activeCount int) string {
-	return renderHeaderWithFilter(width, contextLabel, totalSessions, activeCount, 0, 0)
+func renderHeader(width int, contextLabel, stats string) string {
+	return renderHeaderWithFilter(width, contextLabel, stats, 0, 0)
 }
 
-// renderHeaderWithFilter renders the header with filter count display
-func renderHeaderWithFilter(width int, contextLabel string, totalSessions, activeCount, filteredCount, totalCount int) string {
+// renderHeaderWithFilter renders the header with optional filtered-count display.
+func renderHeaderWithFilter(width int, contextLabel, stats string, filteredCount, totalCount int) string {
+	statsLabel := stats
+	if totalCount > 0 && filteredCount != totalCount {
+		statsLabel = fmt.Sprintf("%d/%d shown / %s", filteredCount, totalCount, stats)
+	}
+
 	if width < 100 {
-		// Narrow screen: show only core stats
 		logo := styles.TitleStyle.Render("cc9s")
-		var stats string
-		if totalCount > 0 && filteredCount != totalCount {
-			stats = fmt.Sprintf("%s / %d/%d sessions / %d active", contextLabel, filteredCount, totalCount, activeCount)
-		} else {
-			stats = fmt.Sprintf("%s / %d sessions / %d active", contextLabel, totalSessions, activeCount)
-		}
-		statsRendered := styles.NormalStyle.Render(stats)
+		statsRendered := styles.NormalStyle.Render(fmt.Sprintf("%s / %s", contextLabel, statsLabel))
 		sep := styles.DimStyle.Render(" │ ")
 
 		content := fmt.Sprintf(" %s%s%s ", logo, sep, statsRendered)
@@ -34,23 +32,14 @@ func renderHeaderWithFilter(width int, contextLabel string, totalSessions, activ
 	}
 
 	logo := styles.TitleStyle.Render("cc9s v0.1.0")
-
-	var stats string
-	if totalCount > 0 && filteredCount != totalCount {
-		stats = fmt.Sprintf("%s / %d/%d sessions / %d active", contextLabel, filteredCount, totalCount, activeCount)
-	} else {
-		stats = fmt.Sprintf("%s / %d sessions / %d active", contextLabel, totalSessions, activeCount)
-	}
-	statsRendered := styles.NormalStyle.Render(stats)
-
+	statsRendered := styles.NormalStyle.Render(fmt.Sprintf("%s / %s", contextLabel, statsLabel))
 	clock := styles.DimStyle.Render(time.Now().Format("15:04:05"))
-
 	sep := styles.DimStyle.Render(" │ ")
 
 	left := fmt.Sprintf("%s%s%s", logo, sep, statsRendered)
 	right := clock
 
-	gap := width - lipgloss.Width(left) - lipgloss.Width(right) - 4 // subtract left/right padding
+	gap := width - lipgloss.Width(left) - lipgloss.Width(right) - 4
 	if gap < 1 {
 		gap = 1
 	}

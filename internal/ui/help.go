@@ -35,7 +35,7 @@ func renderHelp(width, height int) string {
 		"  " + styles.HeaderStyle.Render("Session Operations"),
 		"  " + styles.FooterKeyStyle.Render("d") + styles.FooterStyle.Render("         View session details"),
 		"  " + styles.FooterKeyStyle.Render("l") + styles.FooterStyle.Render("         View session log"),
-		"  " + styles.FooterKeyStyle.Render("/") + styles.FooterStyle.Render("         Search sessions"),
+		"  " + styles.FooterKeyStyle.Render("/") + styles.FooterStyle.Render("         Search sessions or lifecycle states"),
 		"",
 		"  " + styles.HeaderStyle.Render("Multi-select & Delete"),
 		"  " + styles.FooterKeyStyle.Render("Space") + styles.FooterStyle.Render("      Toggle select session"),

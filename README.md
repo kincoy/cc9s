@@ -22,6 +22,17 @@ Claude Code stores session data as JSONL files under `~/.claude/`. When you accu
 
 cc9s solves this by providing a full-screen terminal UI — inspired by [k9s](https://github.com/derailed/k9s) — that lets you browse, search, inspect, and resume sessions without leaving your keyboard.
 
+## Demo
+
+Watch a terminal recording here: [asciinema demo](https://asciinema.org/a/vABD89zAYT8G7Y6C)
+
+One common flow:
+
+1. Press `:` and run `sessions`
+2. Press `/` to start real-time search
+3. Type `active` to find active sessions, or `stale` to inspect unreliable ones
+4. Press `d` to open details for the selected session
+
 ## Features
 
 - **Two-level navigation** — Projects → Sessions, drill down with `Enter`, go back with `Esc`

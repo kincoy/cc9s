@@ -32,8 +32,11 @@ var (
 
 	ActiveStatusStyle = ActiveStyle
 
-	CompletedStatusStyle = lipgloss.NewStyle().
-				Foreground(ColorDim)
+	IdleStatusStyle = IdleStyle
+
+	CompletedStatusStyle = CompletedStyle
+
+	StaleStatusStyle = StaleStyle
 
 	DialogTitleStyle = lipgloss.NewStyle().
 				Foreground(ColorWarning).

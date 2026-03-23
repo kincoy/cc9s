@@ -16,9 +16,9 @@ import (
 type DetailViewModel struct {
 	session claudefs.Session       // session object
 	stats   *claudefs.SessionStats // stats data (loaded async)
-	loading bool               // whether loading is in progress
-	width   int                // panel width
-	height  int                // panel height
+	loading bool                   // whether loading is in progress
+	width   int                    // panel width
+	height  int                    // panel height
 }
 
 // NewDetailViewModel creates a new detail panel Model
@@ -30,13 +30,13 @@ func NewDetailViewModel(session claudefs.Session) *DetailViewModel {
 }
 
 func (m *DetailViewModel) Init() tea.Cmd {
-	return loadSessionStatsCmd(m.session.ID)
+	return loadSessionStatsCmd(m.session)
 }
 
 // loadSessionStatsCmd asynchronously loads session stats
-func loadSessionStatsCmd(sessionID string) tea.Cmd {
+func loadSessionStatsCmd(session claudefs.Session) tea.Cmd {
 	return func() tea.Msg {
-		stats, err := claudefs.ParseSessionStats(sessionID)
+		stats, err := claudefs.ParseSessionStats(session)
 		return statsLoadedMsg{stats: stats, err: err}
 	}
 }
@@ -124,6 +124,10 @@ func (m *DetailViewModel) ViewBox(width int) string {
 	sections = append(sections, m.renderMetadata())
 	sections = append(sections, "")
 
+	// Lifecycle section
+	sections = append(sections, m.renderLifecycle())
+	sections = append(sections, "")
+
 	// Summary section
 	sections = append(sections, m.renderSummary())
 	sections = append(sections, "")
@@ -171,6 +175,23 @@ func (m *DetailViewModel) renderMetadata() string {
 	lines = append(lines, m.renderField("Started", claudefs.FormatTime(m.stats.StartTime)))
 	lines = append(lines, m.renderField("Last Active", claudefs.FormatTime(m.stats.LastActiveTime)))
 	lines = append(lines, m.renderField("Duration", claudefs.FormatDuration(m.stats.Duration)))
+
+	return strings.Join(lines, "\n")
+}
+
+// renderLifecycle renders the lifecycle state and explanation section.
+func (m *DetailViewModel) renderLifecycle() string {
+	var lines []string
+
+	lifecycle := m.session.Lifecycle
+	stateLabel := styles.LifecycleStatusStyle(lifecycle.State).Render(styles.LifecycleStatusText(lifecycle.State))
+
+	lines = append(lines, styles.DetailSectionStyle.Render("Lifecycle"))
+	lines = append(lines, m.renderField("State", stateLabel))
+
+	for _, reason := range lifecycle.Evidence.Reasons {
+		lines = append(lines, "  "+styles.DetailValueStyle.Render("- "+reason))
+	}
 
 	return strings.Join(lines, "\n")
 }

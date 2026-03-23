@@ -414,36 +414,32 @@ func (a *AppModel) renderHeader() string {
 	if a.currentScreen == ScreenProjects {
 		projectCount, totalSessions, activeCount := a.projectList.GetStats()
 		contextLabel := fmt.Sprintf("%d projects", projectCount)
+		statsLabel := fmt.Sprintf("%d sessions / %d active", totalSessions, activeCount)
 		if a.inputMode == InputSearch {
 			filtered, total := a.projectList.GetFilterStats()
-			return renderHeaderWithFilter(a.width, contextLabel, totalSessions, activeCount, filtered, total)
+			return renderHeaderWithFilter(a.width, contextLabel, statsLabel, filtered, total)
 		}
-		return renderHeader(a.width, contextLabel, totalSessions, activeCount)
+		return renderHeader(a.width, contextLabel, statsLabel)
 	}
 
 	if a.sessionList != nil {
 		ctx := a.sessionList.GetContext()
-		sessionCount := len(a.sessionList.sessions)
-		activeCount := 0
-		for _, gs := range a.sessionList.sessions {
-			if gs.Session.IsActive {
-				activeCount++
-			}
-		}
+		summary := summarizeGlobalSessions(a.sessionList.sessions)
 		var contextLabel string
 		if ctx.Type == ContextAll {
 			contextLabel = "All Projects"
 		} else {
 			contextLabel = ctx.Value
 		}
+		statsLabel := formatLifecycleSummary(a.width, summary)
 		if a.inputMode == InputSearch {
 			filtered, total := a.sessionList.GetFilterStats()
-			return renderHeaderWithFilter(a.width, contextLabel, total, activeCount, filtered, total)
+			return renderHeaderWithFilter(a.width, contextLabel, statsLabel, filtered, total)
 		}
-		return renderHeader(a.width, contextLabel, sessionCount, activeCount)
+		return renderHeader(a.width, contextLabel, statsLabel)
 	}
 
-	return renderHeader(a.width, "0 projects", 0, 0)
+	return renderHeader(a.width, "0 projects", "0 sessions / 0 active")
 }
 
 // renderBody renders the body area content
@@ -863,4 +859,19 @@ func (a *AppModel) applySearchToCurrentView(query string) {
 			a.sessionList.ApplyFilter(query)
 		}
 	}
+}
+
+func summarizeGlobalSessions(global []claudefs.GlobalSession) claudefs.LifecycleSummary {
+	sessions := make([]claudefs.Session, 0, len(global))
+	for _, gs := range global {
+		sessions = append(sessions, gs.Session)
+	}
+	return claudefs.SummarizeLifecycleSessions(sessions)
+}
+
+func formatLifecycleSummary(width int, summary claudefs.LifecycleSummary) string {
+	if width < 120 {
+		return fmt.Sprintf("%d sessions / A:%d I:%d C:%d S:%d", summary.Total, summary.Active, summary.Idle, summary.Completed, summary.Stale)
+	}
+	return fmt.Sprintf("%d sessions / %d active / %d idle / %d completed / %d stale", summary.Total, summary.Active, summary.Idle, summary.Completed, summary.Stale)
 }
