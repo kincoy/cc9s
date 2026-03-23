@@ -27,17 +27,14 @@ func ScanProjects() ScanResult {
 
 	claudeDir := filepath.Join(homeDir, ".claude")
 	projectsDir := filepath.Join(claudeDir, "projects")
+	activeMarkers := getActiveSessionMarkers(homeDir)
 
 	// Scan project directories
-	projects, totalSessions, err := scanProjectsDir(projectsDir)
+	projects, totalSessions, activeCount, err := scanProjectsDir(projectsDir, activeMarkers, start)
 	if err != nil {
 		result.Err = err
 		return result
 	}
-
-	// Count active sessions
-	sessionsDir := filepath.Join(claudeDir, "sessions")
-	activeCount := countActiveSessions(sessionsDir)
 
 	// Sort by most recently active time (descending)
 	sort.Slice(projects, func(i, j int) bool {
@@ -53,14 +50,15 @@ func ScanProjects() ScanResult {
 }
 
 // scanProjectsDir scans the projects directory.
-func scanProjectsDir(projectsDir string) ([]Project, int, error) {
+func scanProjectsDir(projectsDir string, activeMarkers map[string]activeSessionInfo, now time.Time) ([]Project, int, int, error) {
 	entries, err := os.ReadDir(projectsDir)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 
 	projects := make([]Project, 0, len(entries))
 	totalSessions := 0
+	activeCount := 0
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -78,7 +76,7 @@ func scanProjectsDir(projectsDir string) ([]Project, int, error) {
 
 		// Scan session files under this project
 		projectDir := filepath.Join(projectsDir, encodedPath)
-		sessionCount, totalSize, lastActive := scanProjectSessions(projectDir)
+		sessionCount, totalSize, lastActive, projectActiveCount := scanProjectSessions(projectDir, activeMarkers, now)
 
 		if sessionCount > 0 {
 			projects = append(projects, Project{
@@ -90,17 +88,18 @@ func scanProjectsDir(projectsDir string) ([]Project, int, error) {
 				TotalSize:    totalSize,
 			})
 			totalSessions += sessionCount
+			activeCount += projectActiveCount
 		}
 	}
 
-	return projects, totalSessions, nil
+	return projects, totalSessions, activeCount, nil
 }
 
 // scanProjectSessions scans session files under a single project.
-func scanProjectSessions(projectDir string) (count int, totalSize int64, lastActive time.Time) {
+func scanProjectSessions(projectDir string, activeMarkers map[string]activeSessionInfo, now time.Time) (count int, totalSize int64, lastActive time.Time, activeCount int) {
 	entries, err := os.ReadDir(projectDir)
 	if err != nil {
-		return 0, 0, time.Time{}
+		return 0, 0, time.Time{}, 0
 	}
 
 	for _, entry := range entries {
@@ -128,26 +127,21 @@ func scanProjectSessions(projectDir string) (count int, totalSize int64, lastAct
 		if info.ModTime().After(lastActive) {
 			lastActive = info.ModTime()
 		}
-	}
 
-	return count, totalSize, lastActive
-}
-
-// countActiveSessions counts the number of active sessions.
-func countActiveSessions(sessionsDir string) int {
-	entries, err := os.ReadDir(sessionsDir)
-	if err != nil {
-		return 0
-	}
-
-	count := 0
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
-			count++
+		sessionID := strings.TrimSuffix(entry.Name(), ".jsonl")
+		snapshot := ClassifySessionLifecycle(
+			info.ModTime(),
+			hasActiveMarker(activeMarkers, sessionID),
+			SessionHealth{IsReliable: true},
+			now,
+			DefaultActivityWindow,
+		)
+		if snapshot.State == SessionLifecycleActive {
+			activeCount++
 		}
 	}
 
-	return count
+	return count, totalSize, lastActive, activeCount
 }
 
 // LoadProjectSessions loads all sessions under a project.
@@ -167,7 +161,7 @@ func LoadProjectSessions(projectEncodedPath string) ([]Session, error) {
 	}
 
 	// Build active session set
-	activeSessionIDs := getActiveSessionIDs(homeDir)
+	activeMarkers := getActiveSessionMarkers(homeDir)
 
 	// Project-level path resolution (no longer reading JSONL per session)
 	projectPath := DecodePathFS(projectEncodedPath)
@@ -176,6 +170,7 @@ func LoadProjectSessions(projectEncodedPath string) ([]Session, error) {
 	}
 
 	sessions := make([]Session, 0)
+	now := time.Now()
 
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
@@ -192,8 +187,9 @@ func LoadProjectSessions(projectEncodedPath string) ([]Session, error) {
 			continue
 		}
 
-		// Check if the session is active
-		isActive := activeSessionIDs[sessionID]
+		inspection := inspectSessionFile(filePath)
+		hasMarker := hasActiveMarker(activeMarkers, sessionID)
+		lifecycle := ClassifySessionLifecycle(info.ModTime(), hasMarker, inspection.Health, now, DefaultActivityWindow)
 
 		// Estimate event count (simplified: file size / average line size of 200 bytes)
 		eventCount := int(info.Size() / 200)
@@ -201,19 +197,18 @@ func LoadProjectSessions(projectEncodedPath string) ([]Session, error) {
 			eventCount = 1
 		}
 
-		// Extract session summary (first user message)
-		summary := ExtractSessionSummary(filePath)
-
 		sessions = append(sessions, Session{
-			ID:           sessionID,
-			ProjectPath:  projectPath,
-			EncodedPath:  projectEncodedPath,
-			StartTime:    info.ModTime(), // Simplified: using ModTime, actual creation time requires platform-specific API
-			LastActiveAt: info.ModTime(),
-			EventCount:   eventCount,
-			FileSize:     info.Size(),
-			IsActive:     isActive,
-			Summary:      summary,
+			ID:              sessionID,
+			ProjectPath:     projectPath,
+			EncodedPath:     projectEncodedPath,
+			StartTime:       info.ModTime(), // Simplified: using ModTime, actual creation time requires platform-specific API
+			LastActiveAt:    info.ModTime(),
+			EventCount:      eventCount,
+			FileSize:        info.Size(),
+			HasActiveMarker: hasMarker,
+			IsActive:        lifecycle.State == SessionLifecycleActive,
+			Lifecycle:       lifecycle,
+			Summary:         inspection.Summary,
 		})
 	}
 
@@ -227,20 +222,21 @@ func LoadProjectSessions(projectEncodedPath string) ([]Session, error) {
 
 // activeSessionInfo is the JSON structure of an active session marker file.
 type activeSessionInfo struct {
-	PID       int    `json:"pid"`
-	SessionID string `json:"sessionId"`
-	CWD       string `json:"cwd"`
-	StartedAt int64  `json:"startedAt"`
+	PID        int    `json:"pid"`
+	SessionID  string `json:"sessionId"`
+	CWD        string `json:"cwd"`
+	StartedAt  int64  `json:"startedAt"`
+	MarkerPath string `json:"-"`
 }
 
-// getActiveSessionIDs reads all active session IDs.
-func getActiveSessionIDs(homeDir string) map[string]bool {
-	activeIDs := make(map[string]bool)
+// getActiveSessionMarkers reads all active session marker files keyed by session ID.
+func getActiveSessionMarkers(homeDir string) map[string]activeSessionInfo {
+	activeMarkers := make(map[string]activeSessionInfo)
 	sessionsDir := filepath.Join(homeDir, ".claude", "sessions")
 
 	entries, err := os.ReadDir(sessionsDir)
 	if err != nil {
-		return activeIDs
+		return activeMarkers
 	}
 
 	for _, entry := range entries {
@@ -265,13 +261,23 @@ func getActiveSessionIDs(homeDir string) map[string]bool {
 			continue
 		}
 
-		// Record the active session ID
+		info.MarkerPath = filePath
+
+		// Record the newest marker for each session ID.
 		if info.SessionID != "" {
-			activeIDs[info.SessionID] = true
+			existing, ok := activeMarkers[info.SessionID]
+			if !ok || info.StartedAt >= existing.StartedAt {
+				activeMarkers[info.SessionID] = info
+			}
 		}
 	}
 
-	return activeIDs
+	return activeMarkers
+}
+
+func hasActiveMarker(activeMarkers map[string]activeSessionInfo, sessionID string) bool {
+	_, ok := activeMarkers[sessionID]
+	return ok
 }
 
 // sessionMetadata is the session metadata from the first line of a JSONL file.

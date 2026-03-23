@@ -3,11 +3,12 @@ package styles
 import "charm.land/lipgloss/v2"
 
 var (
-	ColorActive  = lipgloss.Color("#04B575")
-	ColorNormal  = lipgloss.Color("#BBBBBB")
-	ColorWarning = lipgloss.Color("#FBBF24")
-	ColorError   = lipgloss.Color("#EF4444")
-	ColorDim     = lipgloss.Color("#888888")
+	ColorActive    = lipgloss.Color("#04B575")
+	ColorCompleted = lipgloss.Color("#60A5FA")
+	ColorNormal    = lipgloss.Color("#BBBBBB")
+	ColorWarning   = lipgloss.Color("#FBBF24")
+	ColorError     = lipgloss.Color("#EF4444")
+	ColorDim       = lipgloss.Color("#888888")
 )
 
 var (

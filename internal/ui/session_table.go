@@ -49,7 +49,7 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 	}
 
 	idWidth := 12
-	statusWidth := 12
+	statusWidth := 13
 	lastActiveWidth := 14
 	eventsWidth := 8
 	sizeWidth := 10
@@ -140,16 +140,8 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 			sessionID = sessionID[:idWidth-3] + "..."
 		}
 
-		// Format status
-		var statusText string
-		var statusStyle lipgloss.Style
-		if gs.Session.IsActive {
-			statusText = "● Active"
-			statusStyle = styles.ActiveStatusStyle
-		} else {
-			statusText = "○ Completed"
-			statusStyle = styles.CompletedStatusStyle
-		}
+		statusText := styles.LifecycleStatusText(gs.Session.Lifecycle.State)
+		statusStyle := styles.LifecycleStatusStyle(gs.Session.Lifecycle.State)
 
 		rowSep := rowStyle.Render("  ")
 

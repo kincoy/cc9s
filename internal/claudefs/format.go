@@ -8,6 +8,11 @@ import (
 	"time"
 )
 
+var DefaultActivityWindow = ActivityWindow{
+	ActiveWindow: 15 * time.Minute,
+	IdleWindow:   24 * time.Hour,
+}
+
 // DecodePathFS decodes a Claude project path via filesystem validation.
 //
 // Claude Code path encoding rules: / -> -, . -> -, - -> - (unchanged)
@@ -118,7 +123,7 @@ func buildCandidates(segments []string) []string {
 	numSeps := n - 1
 	candidates := make([]string, 0, 1<<uint(numSeps))
 
-	for mask := 0; mask < (1<<uint(numSeps)); mask++ {
+	for mask := 0; mask < (1 << uint(numSeps)); mask++ {
 		var b strings.Builder
 		for i, s := range segments {
 			if i > 0 {
@@ -286,4 +291,138 @@ func FormatNumber(n int) string {
 	}
 
 	return result.String()
+}
+
+// NormalizeActivityWindow fills unset lifecycle thresholds with defaults.
+func NormalizeActivityWindow(window ActivityWindow) ActivityWindow {
+	if window.ActiveWindow <= 0 {
+		window.ActiveWindow = DefaultActivityWindow.ActiveWindow
+	}
+	if window.IdleWindow <= window.ActiveWindow {
+		window.IdleWindow = DefaultActivityWindow.IdleWindow
+	}
+	return window
+}
+
+// ClassifySessionLifecycle derives the shared lifecycle snapshot for a session.
+func ClassifySessionLifecycle(lastActiveAt time.Time, hasActiveMarker bool, health SessionHealth, now time.Time, window ActivityWindow) SessionLifecycleSnapshot {
+	window = NormalizeActivityWindow(window)
+
+	snapshot := SessionLifecycleSnapshot{
+		ClassifiedAt: now,
+	}
+
+	evidence := StateEvidenceSummary{
+		LastActiveAt:    lastActiveAt,
+		HasActiveMarker: hasActiveMarker,
+	}
+
+	if !health.IsReliable {
+		snapshot.State = SessionLifecycleStale
+		evidence.State = snapshot.State
+		evidence.Reasons = []string{
+			"This session is still listed, but it no longer looks like a reliable normal session.",
+			healthProblemReason(health.Problem),
+			"Stale means abnormal residue, not just an old inactive session.",
+		}
+		snapshot.Evidence = evidence
+		return snapshot
+	}
+
+	if lastActiveAt.IsZero() {
+		snapshot.State = SessionLifecycleIdle
+		evidence.State = snapshot.State
+		evidence.Reasons = []string{
+			"This session still looks structurally healthy.",
+			"No trustworthy last-activity timestamp is available, so it is treated as not currently active.",
+			"It remains a normal session rather than stale residue.",
+		}
+		snapshot.Evidence = evidence
+		return snapshot
+	}
+
+	if now.Before(lastActiveAt) {
+		now = lastActiveAt
+		snapshot.ClassifiedAt = now
+	}
+
+	age := now.Sub(lastActiveAt)
+
+	switch {
+	case age <= window.ActiveWindow:
+		snapshot.State = SessionLifecycleActive
+		evidence.Reasons = []string{
+			fmt.Sprintf("Last activity was %s, inside the %s active window.", FormatTimeAgo(lastActiveAt), FormatDuration(window.ActiveWindow)),
+			activeCoherenceReason(hasActiveMarker),
+		}
+	case hasActiveMarker:
+		snapshot.State = SessionLifecycleIdle
+		evidence.Reasons = []string{
+			"Recent activity is no longer current, so this session is not active right now.",
+			"The session still has a live marker and remains structurally healthy.",
+			"Long inactivity with a healthy session is treated as idle, not stale.",
+		}
+	case age <= window.IdleWindow:
+		snapshot.State = SessionLifecycleIdle
+		evidence.Reasons = []string{
+			fmt.Sprintf("Last activity was %s, outside the %s active window.", FormatTimeAgo(lastActiveAt), FormatDuration(window.ActiveWindow)),
+			fmt.Sprintf("It is still within the %s idle window.", FormatDuration(window.IdleWindow)),
+			"This session remains healthy and can still be treated as normal.",
+		}
+	default:
+		snapshot.State = SessionLifecycleCompleted
+		evidence.Reasons = []string{
+			fmt.Sprintf("Last activity was %s, beyond the %s idle window.", FormatTimeAgo(lastActiveAt), FormatDuration(window.IdleWindow)),
+			"No active marker remains for this session.",
+			"This session is historical but still normal, so it is completed rather than stale.",
+		}
+	}
+
+	evidence.State = snapshot.State
+	snapshot.Evidence = evidence
+	return snapshot
+}
+
+func activeCoherenceReason(hasActiveMarker bool) string {
+	if hasActiveMarker {
+		return "The active marker is present and still coherent with recent activity."
+	}
+	return "Recent activity is current and there is no conflicting marker evidence."
+}
+
+func healthProblemReason(problem string) string {
+	if strings.TrimSpace(problem) == "" {
+		return "Its session record is incomplete or unreliable."
+	}
+	return problem
+}
+
+// LifecycleStateMatchesQuery checks whether a query refers to a lifecycle state term.
+func LifecycleStateMatchesQuery(state SessionLifecycleState, query string) bool {
+	q := strings.TrimSpace(strings.ToLower(query))
+	if q == "" {
+		return false
+	}
+
+	stateTerm := strings.ToLower(string(state))
+	return strings.Contains(stateTerm, q) || strings.Contains(q, stateTerm)
+}
+
+// SummarizeLifecycleSessions counts sessions by lifecycle state.
+func SummarizeLifecycleSessions(sessions []Session) LifecycleSummary {
+	var summary LifecycleSummary
+	for _, session := range sessions {
+		summary.Total++
+		switch session.Lifecycle.State {
+		case SessionLifecycleActive:
+			summary.Active++
+		case SessionLifecycleIdle:
+			summary.Idle++
+		case SessionLifecycleCompleted:
+			summary.Completed++
+		case SessionLifecycleStale:
+			summary.Stale++
+		}
+	}
+	return summary
 }

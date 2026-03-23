@@ -9,9 +9,10 @@ import (
 
 // DeleteTarget describes a session to be deleted.
 type DeleteTarget struct {
-	SessionID      string // Session ID
-	EncodedPath    string // Project encoded path
-	IsActive       bool   // Whether the session is active
+	SessionID       string // Session ID
+	EncodedPath     string // Project encoded path
+	HasActiveMarker bool   // Whether a raw marker file exists
+	IsActive        bool   // Whether the session is currently active under lifecycle rules
 }
 
 // DeleteSession deletes a single session (JSONL file + active marker)
@@ -36,10 +37,14 @@ func DeleteSession(target DeleteTarget) error {
 		return fmt.Errorf("remove %s: %w", jsonlPath, err)
 	}
 
-	// Delete active marker file (if it exists)
-	activePath := filepath.Join(projectDir, "sessions", target.SessionID+".json")
-	if err := os.Remove(activePath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove %s: %w", activePath, err)
+	// Delete matching marker files (including stale markers) when present.
+	if target.HasActiveMarker {
+		markers := getActiveSessionMarkers(homeDir)
+		if marker, ok := markers[target.SessionID]; ok && marker.MarkerPath != "" {
+			if err := os.Remove(marker.MarkerPath); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("remove %s: %w", marker.MarkerPath, err)
+			}
+		}
 	}
 
 	return nil

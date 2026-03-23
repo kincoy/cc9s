@@ -10,15 +10,20 @@ import (
 	"time"
 )
 
+type sessionInspection struct {
+	Summary string
+	Health  SessionHealth
+}
+
 // ParseSessionStats parses session statistics (single-pass JSONL traversal).
-func ParseSessionStats(sessionID string) (*SessionStats, error) {
+func ParseSessionStats(session Session) (*SessionStats, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("get user home dir: %w", err)
 	}
 
 	// Find the JSONL file
-	jsonlPath, err := findSessionJSONL(homeDir, sessionID)
+	jsonlPath, err := findSessionJSONL(homeDir, session.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +35,8 @@ func ParseSessionStats(sessionID string) (*SessionStats, error) {
 	defer file.Close()
 
 	stats := &SessionStats{
-		SessionID: sessionID,
+		SessionID: session.ID,
+		Lifecycle: session.Lifecycle,
 		ToolUsage: make(map[string]int),
 	}
 
@@ -364,85 +370,90 @@ func ParseSessionLog(sessionID string, offset, limit int) ([]LogEntry, int, erro
 	return allTurns[offset:end], totalTurns, nil
 }
 
-// ExtractSessionSummary extracts the first user message from a JSONL file as the session summary.
-func ExtractSessionSummary(filePath string) string {
+func inspectSessionFile(filePath string) sessionInspection {
+	inspection := sessionInspection{
+		Health: SessionHealth{
+			IsReliable: false,
+			Problem:    "The session file could not be inspected.",
+		},
+	}
+
 	file, err := os.Open(filePath)
 	if err != nil {
-		return ""
+		inspection.Health.Problem = "The session file cannot be opened."
+		return inspection
 	}
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-	lineCount := 0
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+
+	totalLines := 0
+	parsedLines := 0
+	userEvents := 0
+	assistantEvents := 0
+	hasSessionMeta := false
 
 	for scanner.Scan() {
-		lineCount++
-		if lineCount > 50 {
-			break
-		}
+		totalLines++
 
 		var event map[string]interface{}
 		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
 			continue
 		}
+		parsedLines++
+
+		if v, ok := event["sessionId"].(string); ok && v != "" {
+			hasSessionMeta = true
+		}
+		if v, ok := event["cwd"].(string); ok && v != "" {
+			hasSessionMeta = true
+		}
+		if v, ok := event["version"].(string); ok && v != "" {
+			hasSessionMeta = true
+		}
 
 		eventType, _ := event["type"].(string)
-		if eventType != "user" {
-			continue
-		}
-
-		isMeta, _ := event["isMeta"].(bool)
-		if isMeta {
-			continue
-		}
-
-		msg, ok := event["message"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		// Extract text content
-		var text string
-		switch content := msg["content"].(type) {
-		case string:
-			text = content
-		case []interface{}:
-			for _, block := range content {
-				if blockMap, ok := block.(map[string]interface{}); ok {
-					if blockType, _ := blockMap["type"].(string); blockType == "text" {
-						if t, ok := blockMap["text"].(string); ok {
-							text = t
-						}
+		switch eventType {
+		case "user":
+			isMeta, _ := event["isMeta"].(bool)
+			if !isMeta {
+				userEvents++
+				if inspection.Summary == "" {
+					if summary := extractSummaryText(event); summary != "" {
+						inspection.Summary = summary
 					}
 				}
-				if text != "" {
-					break
-				}
 			}
+		case "assistant":
+			assistantEvents++
 		}
 
-		if text == "" {
-			continue
+		if totalLines >= 200 && hasSessionMeta && (userEvents > 0 || assistantEvents > 0) {
+			break
 		}
-
-		// Filter noise: commands like /clear, pure file references (e.g. @./.gitconfig)
-		cleaned := cleanSummary(text)
-		if cleaned == "" {
-			continue
-		}
-		if strings.HasPrefix(text, "<command-name>/") {
-			continue
-		}
-		// Skip pure file references (starts with @ and has no space, e.g. @./.gitconfig)
-		trimmed := strings.TrimSpace(text)
-		if strings.HasPrefix(trimmed, "@") && !strings.Contains(trimmed, " ") {
-			continue
-		}
-
-		return cleaned
 	}
 
-	return ""
+	switch {
+	case totalLines == 0:
+		inspection.Health.Problem = "The session file is empty."
+	case parsedLines == 0:
+		inspection.Health.Problem = "The session file has no parseable JSONL events."
+	case userEvents == 0 && assistantEvents == 0:
+		inspection.Health.Problem = "The session file only has residue events and no normal user/assistant session chain."
+	case !hasSessionMeta:
+		inspection.Health.Problem = "The session file is missing basic session metadata."
+	default:
+		inspection.Health.IsReliable = true
+		inspection.Health.Problem = ""
+	}
+
+	return inspection
+}
+
+// ExtractSessionSummary extracts the first user message from a JSONL file as the session summary.
+func ExtractSessionSummary(filePath string) string {
+	return inspectSessionFile(filePath).Summary
 }
 
 // cleanSummary cleans summary text: removes newlines and extra spaces (does not truncate, UI layer handles that)
@@ -459,4 +470,48 @@ func truncateString(s string, maxRunes int) string {
 		return s
 	}
 	return string(runes[:maxRunes]) + "..."
+}
+
+func extractSummaryText(event map[string]interface{}) string {
+	msg, ok := event["message"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+
+	var text string
+	switch content := msg["content"].(type) {
+	case string:
+		text = content
+	case []interface{}:
+		for _, block := range content {
+			if blockMap, ok := block.(map[string]interface{}); ok {
+				if blockType, _ := blockMap["type"].(string); blockType == "text" {
+					if t, ok := blockMap["text"].(string); ok {
+						text = t
+					}
+				}
+			}
+			if text != "" {
+				break
+			}
+		}
+	}
+
+	if text == "" {
+		return ""
+	}
+
+	cleaned := cleanSummary(text)
+	if cleaned == "" {
+		return ""
+	}
+	if strings.HasPrefix(text, "<command-name>/") {
+		return ""
+	}
+	trimmed := strings.TrimSpace(text)
+	if strings.HasPrefix(trimmed, "@") && !strings.Contains(trimmed, " ") {
+		return ""
+	}
+
+	return cleaned
 }
