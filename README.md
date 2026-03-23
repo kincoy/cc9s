@@ -27,7 +27,7 @@ cc9s solves this by providing a full-screen terminal UI — inspired by [k9s](ht
 - **Two-level navigation** — Projects → Sessions, drill down with `Enter`, go back with `Esc`
 - **Session resume** — Jump directly into a Claude Code session from the TUI
 - **Search & filter** — `/` to search, `:context <name>` to filter by project
-- **Batch delete** — `Space` to select, `d` to delete multiple sessions
+- **Batch delete** — `Space` to select, `Ctrl+D` to delete multiple sessions
 - **Session details** — View session stats, summary, and tool call logs
 - **Tab completion** — Auto-complete commands and project names
 - **Fully keyboard-driven** — No mouse required
@@ -135,8 +135,9 @@ On first launch, cc9s scans `~/.claude/projects/` for projects and sessions. Thi
 |-----|--------|
 | `/` | Search sessions |
 | `s` | Toggle sort order |
-| `d` | Delete selected session(s) |
-| `e` | View session details |
+| `d` | View session details |
+| `Space` | Toggle select session |
+| `Ctrl+D` | Delete selected session(s) |
 | `l` | View session log |
 | `0` | Switch to "all projects" context |
 | `?` | Help panel |
