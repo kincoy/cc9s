@@ -21,18 +21,10 @@ const (
 
 // AgentListModel agent list view model.
 type AgentListModel struct {
-	context         Context
-	agents          []claudefs.AgentResource
-	allAgents       []claudefs.AgentResource
-	contextAgents   []claudefs.AgentResource
-	filterQuery     string
-	cursor          int
-	loading         bool
-	loadErr         error
-	sortBy          AgentSortField
-	sortAsc         bool
-	restoreAgentKey string
-	restoreCursor   int
+	state   DefaultResourceListState[claudefs.AgentResource]
+	loadErr error
+	sortBy  AgentSortField
+	sortAsc bool
 }
 
 type agentsLoadedMsg struct {
@@ -41,8 +33,7 @@ type agentsLoadedMsg struct {
 
 func NewAgentListModel() *AgentListModel {
 	return &AgentListModel{
-		context: Context{Type: ContextAll},
-		loading: true,
+		state:   NewDefaultResourceListState[claudefs.AgentResource](),
 		sortBy:  SortByAgentName,
 		sortAsc: true,
 	}
@@ -59,12 +50,10 @@ func scanAgentsCmd() tea.Msg {
 func (m *AgentListModel) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case agentsLoadedMsg:
-		m.loading = false
 		m.loadErr = msg.result.Err
-		m.allAgents = msg.result.Agents
-		m.sortAgents(m.allAgents)
-		m.applyContext()
-		m.restoreCursorAfterReload()
+		items := append([]claudefs.AgentResource(nil), msg.result.Agents...)
+		m.sortAgents(items)
+		m.state.SetItems(items, m.agentHooks())
 
 	case tea.KeyPressMsg:
 		if m.loadErr != nil {
@@ -73,37 +62,37 @@ func (m *AgentListModel) Update(msg tea.Msg) tea.Cmd {
 
 		switch msg.String() {
 		case "j", "down":
-			if m.cursor < len(m.agents)-1 {
-				m.cursor++
+			if m.state.Cursor < len(m.state.VisibleItems)-1 {
+				m.state.Cursor++
 			}
 		case "k", "up":
-			if m.cursor > 0 {
-				m.cursor--
+			if m.state.Cursor > 0 {
+				m.state.Cursor--
 			}
 		case "G":
-			if len(m.agents) > 0 {
-				m.cursor = len(m.agents) - 1
+			if len(m.state.VisibleItems) > 0 {
+				m.state.Cursor = len(m.state.VisibleItems) - 1
 			}
 		case "g":
-			m.cursor = 0
+			m.state.Cursor = 0
 		case "s":
 			m.sortBy = (m.sortBy + 1) % 3
-			m.sortAgents(m.allAgents)
+			m.sortAgents(m.state.AllItems)
 			m.applyContext()
 		case "S":
 			m.sortAsc = !m.sortAsc
-			m.sortAgents(m.allAgents)
+			m.sortAgents(m.state.AllItems)
 			m.applyContext()
 		case "d":
-			if len(m.agents) > 0 {
+			if len(m.state.VisibleItems) > 0 {
 				return func() tea.Msg {
-					return ShowAgentDetailMsg{Agent: m.agents[m.cursor]}
+					return ShowAgentDetailMsg{Agent: m.state.VisibleItems[m.state.Cursor]}
 				}
 			}
 		case "e", "E":
-			if len(m.agents) > 0 {
+			if len(m.state.VisibleItems) > 0 {
 				return func() tea.Msg {
-					return EditAgentMsg{Agent: m.agents[m.cursor]}
+					return EditAgentMsg{Agent: m.state.VisibleItems[m.state.Cursor]}
 				}
 			}
 		}
@@ -113,109 +102,59 @@ func (m *AgentListModel) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *AgentListModel) GetContext() Context {
-	return m.context
+	return m.state.Context
 }
 
 func (m *AgentListModel) SetContext(ctx Context) tea.Cmd {
-	m.context = ctx
-	m.filterQuery = ""
-	m.applyContext()
+	m.state.SetContext(ctx, m.agentHooks())
 	return nil
 }
 
 func (m *AgentListModel) Reload() tea.Cmd {
-	m.captureCursorForReload()
-	m.loading = true
+	m.state.CaptureCursorForReload(m.agentHooks())
+	m.state.Loading = true
 	m.loadErr = nil
 	return scanAgentsCmd
 }
 
 func (m *AgentListModel) View(width, height int) string {
-	if m.loading {
+	if m.state.Loading {
 		return renderCenteredText("Loading agents...", width, height)
 	}
 	if m.loadErr != nil {
 		return renderCenteredText("Failed to load agents: "+m.loadErr.Error(), width, height)
 	}
-	if len(m.agents) == 0 {
-		if m.context.Type == ContextProject {
-			return renderCenteredText("No agents found in project: "+m.context.Value, width, height)
+	if len(m.state.VisibleItems) == 0 {
+		if m.state.Context.Type == ContextProject {
+			return renderCenteredText("No agents found in project: "+m.state.Context.Value, width, height)
 		}
 		return renderCenteredText("No agents found", width, height)
 	}
-	return renderAgentTable(m.agents, m.cursor, width, height, m.ShowProjectColumn(), m.sortBy, m.sortAsc)
+	return renderAgentTable(m.state.VisibleItems, m.state.Cursor, width, height, m.ShowProjectColumn(), m.sortBy, m.sortAsc)
 }
 
 func (m *AgentListModel) ApplyFilter(query string) {
-	m.filterQuery = query
-	m.applyFilter()
+	m.state.ApplyFilter(query, m.agentHooks())
 }
 
 func (m *AgentListModel) ShowProjectColumn() bool {
-	return m.context.Type == ContextAll
+	return m.state.Context.Type == ContextAll
 }
 
 func (m *AgentListModel) captureCursorForReload() {
-	m.restoreAgentKey = ""
-	m.restoreCursor = m.cursor
-	if m.cursor >= 0 && m.cursor < len(m.agents) {
-		m.restoreAgentKey = agentCursorKey(m.agents[m.cursor])
-	}
+	m.state.CaptureCursorForReload(m.agentHooks())
 }
 
 func (m *AgentListModel) restoreCursorAfterReload() {
-	defer func() {
-		m.restoreAgentKey = ""
-		m.restoreCursor = 0
-	}()
-
-	if len(m.agents) == 0 {
-		m.cursor = 0
-		return
-	}
-	if m.restoreAgentKey != "" {
-		for i, agent := range m.agents {
-			if agentCursorKey(agent) == m.restoreAgentKey {
-				m.cursor = i
-				return
-			}
-		}
-	}
-	m.cursor = m.restoreCursor
-	m.clampCursor()
+	m.state.RestoreCursorAfterReload(m.agentHooks())
 }
 
 func (m *AgentListModel) applyContext() {
-	if m.context.Type == ContextAll {
-		m.contextAgents = append([]claudefs.AgentResource(nil), m.allAgents...)
-	} else {
-		filtered := make([]claudefs.AgentResource, 0)
-		for _, agent := range m.allAgents {
-			if agentAvailableInContext(agent, m.context) {
-				filtered = append(filtered, agent)
-			}
-		}
-		m.contextAgents = filtered
-	}
-	m.applyFilter()
+	m.state.rebuild(m.agentHooks())
 }
 
 func (m *AgentListModel) applyFilter() {
-	q := normalizeResourceSearchQuery(m.filterQuery)
-	if q == "" {
-		m.agents = append([]claudefs.AgentResource(nil), m.contextAgents...)
-		m.clampCursor()
-		return
-	}
-
-	filtered := make([]claudefs.AgentResource, 0)
-	for _, agent := range m.contextAgents {
-		if agentMatchesQuery(agent, q) {
-			filtered = append(filtered, agent)
-		}
-	}
-	m.agents = filtered
-	m.clampCursor()
+	m.state.ApplyFilter(m.state.FilterQuery, m.agentHooks())
 }
 
 func agentMatchesQuery(agent claudefs.AgentResource, query string) bool {
@@ -279,32 +218,26 @@ func (m *AgentListModel) sortAgents(agents []claudefs.AgentResource) {
 }
 
 func (m *AgentListModel) clampCursor() {
-	if len(m.agents) == 0 {
-		m.cursor = 0
-		return
-	}
-	if m.cursor >= len(m.agents) {
-		m.cursor = len(m.agents) - 1
-	}
+	m.state.ClampCursor()
 }
 
 func (m *AgentListModel) GetStats() (total, ready, invalid int) {
-	for _, agent := range m.contextAgents {
+	for _, agent := range m.state.ContextItems {
 		if agent.Status == claudefs.AgentStatusReady {
 			ready++
 		} else {
 			invalid++
 		}
 	}
-	return len(m.contextAgents), ready, invalid
+	return len(m.state.ContextItems), ready, invalid
 }
 
 func (m *AgentListModel) GetFilterStats() (filtered, total int) {
-	return len(m.agents), len(m.contextAgents)
+	return m.state.FilterStats()
 }
 
 func (m *AgentListModel) HasActiveFilter() bool {
-	return strings.TrimSpace(normalizeResourceSearchQuery(m.filterQuery)) != ""
+	return m.state.HasActiveFilter()
 }
 
 func (m *AgentListModel) HasLoadError() bool {
@@ -334,8 +267,16 @@ func agentAvailableInContext(agent claudefs.AgentResource, ctx Context) bool {
 }
 
 func (m *AgentListModel) GetSelectedAgent() (claudefs.AgentResource, bool) {
-	if len(m.agents) == 0 || m.cursor < 0 || m.cursor >= len(m.agents) {
+	if len(m.state.VisibleItems) == 0 || m.state.Cursor < 0 || m.state.Cursor >= len(m.state.VisibleItems) {
 		return claudefs.AgentResource{}, false
 	}
-	return m.agents[m.cursor], true
+	return m.state.VisibleItems[m.state.Cursor], true
+}
+
+func (m *AgentListModel) agentHooks() DefaultResourceHooks[claudefs.AgentResource] {
+	return DefaultResourceHooks[claudefs.AgentResource]{
+		CursorKey:    agentCursorKey,
+		InContext:    agentAvailableInContext,
+		MatchesQuery: agentMatchesQuery,
+	}
 }

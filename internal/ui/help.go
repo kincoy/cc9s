@@ -7,7 +7,12 @@ import (
 	"github.com/kincoy/cc9s/internal/ui/styles"
 )
 
-func renderHelp(width, height int) string {
+type ResourceHelpSection struct {
+	Title string
+	Lines []KeyHint
+}
+
+func renderHelp(width, height int, registry *ResourceRegistry, active ResourceDescriptor) string {
 	title := styles.HeaderStyle.Render("Keyboard Shortcuts")
 	divider := styles.BreadcrumbStyle.Render(strings.Repeat("─", 20))
 
@@ -25,46 +30,39 @@ func renderHelp(width, height int) string {
 		"  " + styles.FooterKeyStyle.Render("k / ↑") + styles.FooterStyle.Render("     Move up"),
 		"  " + styles.FooterKeyStyle.Render("g") + styles.FooterStyle.Render("         Go to top"),
 		"  " + styles.FooterKeyStyle.Render("G") + styles.FooterStyle.Render("         Go to bottom"),
-		"  " + styles.FooterKeyStyle.Render("Enter") + styles.FooterStyle.Render("     Open project / Resume session"),
-		"  " + styles.FooterKeyStyle.Render("d") + styles.FooterStyle.Render("         View selected project details"),
-		"  " + styles.FooterKeyStyle.Render("Esc") + styles.FooterStyle.Render("       Go back / Cancel"),
 		"",
 		"  " + styles.HeaderStyle.Render("Sorting"),
 		"  " + styles.FooterKeyStyle.Render("s") + styles.FooterStyle.Render("         Cycle sort field"),
 		"  " + styles.FooterKeyStyle.Render("S") + styles.FooterStyle.Render("         Reverse sort order"),
+	}
+	for _, descriptor := range registry.ordered {
+		if descriptor.HelpSection == nil {
+			continue
+		}
+		section := descriptor.HelpSection()
+		if section.Title == "" || len(section.Lines) == 0 {
+			continue
+		}
+		lines = append(lines, "", "  "+styles.HeaderStyle.Render(section.Title))
+		lines = append(lines, renderKeyHintHelpLines(section.Lines)...)
+	}
+	lines = append(lines, "", "  "+styles.HeaderStyle.Render("Context"))
+	for _, descriptor := range registry.ordered {
+		lines = append(lines,
+			"  "+styles.FooterKeyStyle.Render(":"+descriptor.CommandName)+styles.FooterStyle.Render("    Open "+strings.ToLower(descriptor.DisplayName)+" resource"),
+		)
+	}
+	lines = append(lines,
+		"  "+styles.FooterKeyStyle.Render(":context")+styles.FooterStyle.Render("   Switch context (all / project name)"),
+		"  "+styles.FooterKeyStyle.Render("Tab")+styles.FooterStyle.Render("       Auto-complete commands"),
 		"",
-		"  " + styles.HeaderStyle.Render("Session Operations"),
-		"  " + styles.FooterKeyStyle.Render("d") + styles.FooterStyle.Render("         View session details"),
-		"  " + styles.FooterKeyStyle.Render("l") + styles.FooterStyle.Render("         View session log"),
-		"  " + styles.FooterKeyStyle.Render("/") + styles.FooterStyle.Render("         Search sessions or lifecycle states"),
+		"  "+styles.HeaderStyle.Render("Dialog"),
+		"  "+styles.FooterKeyStyle.Render("y")+styles.FooterStyle.Render("         Confirm"),
+		"  "+styles.FooterKeyStyle.Render("n")+styles.FooterStyle.Render("         Cancel"),
 		"",
-		"  " + styles.HeaderStyle.Render("Skill Operations"),
-		"  " + styles.FooterKeyStyle.Render(":skills") + styles.FooterStyle.Render("    Switch to skills resource"),
-		"  " + styles.FooterKeyStyle.Render("d") + styles.FooterStyle.Render("         View selected skill or command details"),
-		"  " + styles.FooterKeyStyle.Render("e") + styles.FooterStyle.Render("         Edit selected skill or command"),
-		"  " + styles.FooterKeyStyle.Render("/") + styles.FooterStyle.Render("         Search skills and commands by name, path, scope, status"),
-		"",
-		"  " + styles.HeaderStyle.Render("Agent Operations"),
-		"  " + styles.FooterKeyStyle.Render(":agents") + styles.FooterStyle.Render("    Switch to agents resource"),
-		"  " + styles.FooterKeyStyle.Render("d") + styles.FooterStyle.Render("         View selected agent details"),
-		"  " + styles.FooterKeyStyle.Render("e") + styles.FooterStyle.Render("         Edit selected agent file"),
-		"  " + styles.FooterKeyStyle.Render("/") + styles.FooterStyle.Render("         Search agents by name, path, scope, status, config"),
-		"",
-		"  " + styles.HeaderStyle.Render("Multi-select & Delete"),
-		"  " + styles.FooterKeyStyle.Render("Space") + styles.FooterStyle.Render("      Toggle select session"),
-		"  " + styles.FooterKeyStyle.Render("Ctrl+D") + styles.FooterStyle.Render("     Delete selected session(s)"),
-		"",
-		"  " + styles.HeaderStyle.Render("Context"),
-		"  " + styles.FooterKeyStyle.Render("0") + styles.FooterStyle.Render("         Switch to all projects"),
-		"  " + styles.FooterKeyStyle.Render(":skills") + styles.FooterStyle.Render("    Open skills resource"),
-		"  " + styles.FooterKeyStyle.Render(":agents") + styles.FooterStyle.Render("    Open agents resource"),
-		"  " + styles.FooterKeyStyle.Render(":context") + styles.FooterStyle.Render("   Switch context (all / project name)"),
-		"  " + styles.FooterKeyStyle.Render("Tab") + styles.FooterStyle.Render("       Auto-complete commands"),
-		"",
-		"  " + styles.HeaderStyle.Render("Dialog"),
-		"  " + styles.FooterKeyStyle.Render("y") + styles.FooterStyle.Render("         Confirm"),
-		"  " + styles.FooterKeyStyle.Render("n") + styles.FooterStyle.Render("         Cancel"),
-		"",
+	)
+	if active.Capabilities.SupportsAllContextShortcut {
+		lines = append(lines, "  "+styles.FooterKeyStyle.Render("0")+styles.FooterStyle.Render("         Switch to all projects"))
 	}
 
 	content := strings.Join(lines, "\n")
@@ -72,4 +70,29 @@ func renderHelp(width, height int) string {
 		Width(width).
 		Height(height).
 		Render(content)
+}
+
+type helpLine struct {
+	key     string
+	label   string
+	enabled bool
+}
+
+func renderHelpLines(lines ...helpLine) []string {
+	rendered := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if !line.enabled {
+			continue
+		}
+		rendered = append(rendered, "  "+styles.FooterKeyStyle.Render(line.key)+styles.FooterStyle.Render(line.label))
+	}
+	return rendered
+}
+
+func renderKeyHintHelpLines(hints []KeyHint) []string {
+	rendered := make([]string, 0, len(hints))
+	for _, hint := range hints {
+		rendered = append(rendered, "  "+styles.FooterKeyStyle.Render(hint.Key)+styles.FooterStyle.Render(hint.Label))
+	}
+	return rendered
 }

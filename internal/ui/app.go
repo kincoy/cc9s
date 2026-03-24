@@ -50,13 +50,13 @@ type AppModel struct {
 	showHelp bool
 	quitting bool
 
-	currentScreen     Screen
 	currentResource   ResourceType
 	inputMode         InputMode
 	projectList       *ProjectListModel
 	sessionList       *SessionListModel
 	skillList         *SkillListModel
 	agentList         *AgentListModel
+	resourceRegistry  *ResourceRegistry
 	lastProjectCursor int // saves the cursor position of the project list
 
 	searchInput  textinput.Model
@@ -96,11 +96,11 @@ func NewAppModel() *AppModel {
 	ci.CharLimit = 256
 
 	return &AppModel{
-		currentScreen:   ScreenProjects,
-		currentResource: ResourceProjects,
-		projectList:     NewProjectListModel(),
-		searchInput:     si,
-		commandInput:    ci,
+		currentResource:  ResourceProjects,
+		projectList:      NewProjectListModel(),
+		resourceRegistry: newResourceRegistry(),
+		searchInput:      si,
+		commandInput:     ci,
 	}
 }
 
@@ -124,76 +124,56 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Detail view handles message
 	if a.showingDetail && a.detailView != nil {
-		cmd := a.detailView.Update(msg)
-		if cmd != nil {
-			resultMsg := cmd()
-			if _, ok := resultMsg.(CloseDetailMsg); ok {
-				a.showingDetail = false
-				a.detailView = nil
-				return a, nil
-			}
+		if _, ok := msg.(CloseDetailMsg); ok {
+			a.showingDetail = false
+			a.detailView = nil
+			return a, nil
 		}
-		return a, cmd
+		return a, a.detailView.Update(msg)
 	}
 
 	if a.showingProjectDetail && a.projectDetailView != nil {
-		cmd := a.projectDetailView.Update(msg)
-		if cmd != nil {
-			resultMsg := cmd()
-			if _, ok := resultMsg.(CloseProjectDetailMsg); ok {
-				a.showingProjectDetail = false
-				a.projectDetailView = nil
-				return a, nil
-			}
+		if _, ok := msg.(CloseProjectDetailMsg); ok {
+			a.showingProjectDetail = false
+			a.projectDetailView = nil
+			return a, nil
 		}
-		return a, cmd
+		return a, a.projectDetailView.Update(msg)
 	}
 
 	// Skill detail view handles message
 	if a.showingSkillDetail && a.skillDetailView != nil {
+		if _, ok := msg.(CloseSkillDetailMsg); ok {
+			a.showingSkillDetail = false
+			a.skillDetailView = nil
+			return a, nil
+		}
 		if keyMsg, ok := msg.(tea.KeyPressMsg); ok && (keyMsg.String() == "e" || keyMsg.String() == "E") {
 			return a, editSkillCmd(a.skillDetailView.skill)
 		}
-		cmd := a.skillDetailView.Update(msg)
-		if cmd != nil {
-			resultMsg := cmd()
-			if _, ok := resultMsg.(CloseSkillDetailMsg); ok {
-				a.showingSkillDetail = false
-				a.skillDetailView = nil
-				return a, nil
-			}
-		}
-		return a, cmd
+		return a, a.skillDetailView.Update(msg)
 	}
 
 	if a.showingAgentDetail && a.agentDetailView != nil {
+		if _, ok := msg.(CloseAgentDetailMsg); ok {
+			a.showingAgentDetail = false
+			a.agentDetailView = nil
+			return a, nil
+		}
 		if keyMsg, ok := msg.(tea.KeyPressMsg); ok && (keyMsg.String() == "e" || keyMsg.String() == "E") {
 			return a, editAgentCmd(a.agentDetailView.agent)
 		}
-		cmd := a.agentDetailView.Update(msg)
-		if cmd != nil {
-			resultMsg := cmd()
-			if _, ok := resultMsg.(CloseAgentDetailMsg); ok {
-				a.showingAgentDetail = false
-				a.agentDetailView = nil
-				return a, nil
-			}
-		}
-		return a, cmd
+		return a, a.agentDetailView.Update(msg)
 	}
 
 	// Log view handles message
 	if a.showingLog && a.logView != nil {
-		cmd := a.logView.Update(msg)
-		if cmd != nil {
-			resultMsg := cmd()
-			if _, ok := resultMsg.(CloseLogMsg); ok {
-				a.showingLog = false
-				a.logView = nil
-				return a, nil
-			}
+		if _, ok := msg.(CloseLogMsg); ok {
+			a.showingLog = false
+			a.logView = nil
+			return a, nil
 		}
-		return a, cmd
+		return a, a.logView.Update(msg)
 	}
 
 	switch msg := msg.(type) {
@@ -205,6 +185,13 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ShowConfirmDialogMsg:
 		a.showingDialog = true
 		a.confirmDialog = msg.Dialog
+		return a, nil
+
+	case BackToProjectsMsg:
+		a.projectList.cursor = a.lastProjectCursor
+		if ensureActive := a.resourceRegistry.MustGet(ResourceProjects).EnsureActive; ensureActive != nil {
+			return a, ensureActive(a, Context{Type: ContextAll})
+		}
 		return a, nil
 
 	case ShowDetailMsg:
@@ -286,69 +273,26 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case SwitchResourceMsg:
-		a.currentResource = msg.Resource
-		switch msg.Resource {
-		case ResourceProjects:
-			a.currentScreen = ScreenProjects
-		case ResourceSessions:
-			targetCtx := a.currentSessionTargetContext()
-			a.currentScreen = ScreenSessions
-			if a.sessionList == nil {
-				a.sessionList = NewSessionListModel()
-				cmd := a.sessionList.Init()
-				if ctxCmd := a.sessionList.SetContext(targetCtx); ctxCmd != nil {
-					return a, tea.Batch(cmd, ctxCmd)
-				}
-				return a, cmd
-			}
-			cmd := a.sessionList.SetContext(targetCtx)
-			if cmd != nil {
-				return a, cmd
-			}
-		case ResourceSkills:
-			targetCtx := a.currentSkillTargetContext()
-			a.currentScreen = ScreenSkills
-			if a.skillList == nil {
-				a.skillList = NewSkillListModel()
-				cmd := a.skillList.Init()
-				if ctxCmd := a.skillList.SetContext(targetCtx); ctxCmd != nil {
-					return a, tea.Batch(cmd, ctxCmd)
-				}
-				return a, cmd
-			}
-			cmd := a.skillList.SetContext(targetCtx)
-			if cmd != nil {
-				return a, cmd
-			}
-		case ResourceAgents:
-			targetCtx := a.currentAgentTargetContext()
-			a.currentScreen = ScreenAgents
-			if a.agentList == nil {
-				a.agentList = NewAgentListModel()
-				cmd := a.agentList.Init()
-				if ctxCmd := a.agentList.SetContext(targetCtx); ctxCmd != nil {
-					return a, tea.Batch(cmd, ctxCmd)
-				}
-				return a, cmd
-			}
-			cmd := a.agentList.SetContext(targetCtx)
-			if cmd != nil {
-				return a, cmd
-			}
+		descriptor := a.resourceRegistry.MustGet(msg.Resource)
+		targetCtx := Context{Type: ContextAll}
+		if descriptor.ResolveTargetContext != nil {
+			targetCtx = descriptor.ResolveTargetContext(a)
+		}
+		if descriptor.EnsureActive != nil {
+			return a, descriptor.EnsureActive(a, targetCtx)
 		}
 
+	case EnterProjectMsg:
+		a.lastProjectCursor = a.projectList.cursor
+		descriptor := a.resourceRegistry.MustGet(ResourceSessions)
+		if descriptor.EnsureActive != nil {
+			return a, descriptor.EnsureActive(a, Context{Type: ContextProject, Value: msg.Project.Name})
+		}
+		return a, nil
+
 	case SwitchContextMsg:
-		if a.currentScreen == ScreenSessions && a.sessionList != nil {
-			a.currentScreen = ScreenSessions
-			return a, a.sessionList.SetContext(msg.Context)
-		}
-		if a.currentScreen == ScreenSkills && a.skillList != nil {
-			a.currentScreen = ScreenSkills
-			return a, a.skillList.SetContext(msg.Context)
-		}
-		if a.currentScreen == ScreenAgents && a.agentList != nil {
-			a.currentScreen = ScreenAgents
-			return a, a.agentList.SetContext(msg.Context)
+		if setContext := a.currentResourceDescriptor().SetContext; setContext != nil {
+			return a, setContext(a, msg.Context)
 		}
 
 	case DeleteSessionsMsg:
@@ -422,7 +366,10 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 		case "/":
-			if a.currentScreen == ScreenAgents && a.agentList != nil && a.agentList.HasLoadError() {
+			if !a.currentResourceDescriptor().Capabilities.SupportsSearch {
+				return a, nil
+			}
+			if canStartSearch := a.currentResourceDescriptor().CanStartSearch; canStartSearch != nil && !canStartSearch(a) {
 				return a, nil
 			}
 			a.inputMode = InputSearch
@@ -435,7 +382,7 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.commandInput.Focus()
 			return a, nil
 		case "0":
-			if a.currentScreen == ScreenSessions || a.currentScreen == ScreenSkills || a.currentScreen == ScreenAgents {
+			if a.currentResourceDescriptor().Capabilities.SupportsAllContextShortcut {
 				// Shortcut to switch to context=all
 				return a, func() tea.Msg {
 					return SwitchContextMsg{Context: Context{Type: ContextAll}}
@@ -449,62 +396,8 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.projectList.Update(msg)
 	}
 
-	// Dispatch message to current view
-	var cmd tea.Cmd
-	switch a.currentScreen {
-	case ScreenProjects:
-		cmd = a.projectList.Update(msg)
-
-		// Listen for EnterProjectMsg
-		if cmd != nil {
-			resultMsg := cmd()
-			if enterMsg, ok := resultMsg.(EnterProjectMsg); ok {
-				// Save current cursor
-				a.lastProjectCursor = a.projectList.cursor
-				// Create session list Model (with specific project context)
-				a.sessionList = NewSessionListModelForProject(enterMsg.Project.Name)
-				a.currentScreen = ScreenSessions
-				return a, a.sessionList.Init()
-			}
-		}
-
-	case ScreenSessions:
-		if a.sessionList != nil {
-			cmd = a.sessionList.Update(msg)
-		}
-
-		// Listen for BackToProjectsMsg
-		if cmd != nil {
-			resultMsg := cmd()
-			if _, ok := resultMsg.(BackToProjectsMsg); ok {
-				// Restore cursor position
-				a.projectList.cursor = a.lastProjectCursor
-				a.currentScreen = ScreenProjects
-				return a, nil
-			}
-		}
-
-	case ScreenSkills:
-		if a.skillList != nil {
-			cmd = a.skillList.Update(msg)
-		}
-	case ScreenAgents:
-		if a.agentList != nil {
-			cmd = a.agentList.Update(msg)
-		}
-	}
-
-	if _, ok := msg.(skillsLoadedMsg); ok && a.showingSkillDetail && a.skillDetailView != nil && a.skillList != nil {
-		if skill, found := a.skillList.GetSelectedSkill(); found {
-			a.skillDetailView.skill = skill
-		}
-	}
-	if _, ok := msg.(agentsLoadedMsg); ok && a.showingAgentDetail && a.agentDetailView != nil && a.agentList != nil {
-		if agent, found := a.agentList.GetSelectedAgent(); found {
-			a.agentDetailView.agent = agent
-		}
-	}
-
+	cmd := a.updateCurrentView(msg)
+	a.syncDetailOverlaysAfterLoad(msg)
 	return a, cmd
 }
 
@@ -588,136 +481,66 @@ func (a *AppModel) View() tea.View {
 	return v
 }
 
-// getSessionContext gets the current session context (for footer etc.)
-func (a *AppModel) getSessionContext() Context {
-	if a.sessionList != nil {
-		return a.sessionList.GetContext()
-	}
-	return Context{Type: ContextAll}
-}
-
-func (a *AppModel) getSkillContext() Context {
-	if a.skillList != nil {
-		return a.skillList.GetContext()
-	}
-	return Context{Type: ContextAll}
-}
-
-func (a *AppModel) getAgentContext() Context {
-	if a.agentList != nil {
-		return a.agentList.GetContext()
-	}
-	return Context{Type: ContextAll}
-}
-
-func (a *AppModel) currentSessionTargetContext() Context {
-	switch a.currentScreen {
-	case ScreenProjects:
-		if a.projectList != nil && len(a.projectList.projects) > 0 && a.projectList.cursor < len(a.projectList.projects) {
-			return Context{Type: ContextProject, Value: a.projectList.projects[a.projectList.cursor].Name}
+func (a *AppModel) contextForResource(resource ResourceType) Context {
+	switch resource {
+	case ResourceSessions:
+		if a.sessionList != nil {
+			return a.sessionList.GetContext()
 		}
-	case ScreenSessions:
-		return a.getSessionContext()
-	case ScreenSkills:
-		return a.getSkillContext()
-	case ScreenAgents:
-		return a.getAgentContext()
+	case ResourceSkills:
+		if a.skillList != nil {
+			return a.skillList.GetContext()
+		}
+	case ResourceAgents:
+		if a.agentList != nil {
+			return a.agentList.GetContext()
+		}
 	}
 	return Context{Type: ContextAll}
 }
 
-func (a *AppModel) currentSkillTargetContext() Context {
-	switch a.currentScreen {
-	case ScreenProjects:
-		return Context{Type: ContextAll}
-	case ScreenSessions:
-		return a.getSessionContext()
-	case ScreenSkills:
-		return a.getSkillContext()
-	case ScreenAgents:
-		return a.getAgentContext()
+func (a *AppModel) selectedProjectContext() (Context, bool) {
+	if a.projectList == nil || len(a.projectList.projects) == 0 {
+		return Context{}, false
 	}
-	return Context{Type: ContextAll}
+	if a.projectList.cursor < 0 || a.projectList.cursor >= len(a.projectList.projects) {
+		return Context{}, false
+	}
+	return Context{Type: ContextProject, Value: a.projectList.projects[a.projectList.cursor].Name}, true
 }
 
-func (a *AppModel) currentAgentTargetContext() Context {
-	switch a.currentScreen {
-	case ScreenProjects:
+func (a *AppModel) currentTargetContext(includeSelectedProject bool) Context {
+	activeResource := a.currentResource
+	if includeSelectedProject && activeResource == ResourceProjects {
+		if ctx, ok := a.selectedProjectContext(); ok {
+			return ctx
+		}
 		return Context{Type: ContextAll}
-	case ScreenSessions:
-		return a.getSessionContext()
-	case ScreenSkills:
-		return a.getSkillContext()
-	case ScreenAgents:
-		return a.getAgentContext()
 	}
-	return Context{Type: ContextAll}
+	return a.contextForResource(activeResource)
 }
 
 // renderHeader renders the header (context-aware)
 func (a *AppModel) renderHeader() string {
-	if a.currentScreen == ScreenProjects {
-		projectCount, totalSessions, activeCount := a.projectList.GetStats()
-		contextLabel := fmt.Sprintf("%d projects", projectCount)
-		statsLabel := fmt.Sprintf("%d sessions / %d active", totalSessions, activeCount)
-		if a.inputMode == InputSearch {
-			filtered, total := a.projectList.GetFilterStats()
-			return renderHeaderWithFilter(a.width, contextLabel, statsLabel, filtered, total)
+	state := a.currentHeaderState()
+	if state.HasFilteredState {
+		return renderHeaderWithFilter(a.width, state.ContextLabel, state.StatsLabel, state.FilteredCount, state.TotalCount)
+	}
+	return renderHeader(a.width, state.ContextLabel, state.StatsLabel)
+}
+
+func (a *AppModel) currentHeaderState() ResourceHeaderState {
+	if headerState := a.currentResourceDescriptor().HeaderState; headerState != nil {
+		state := headerState(a)
+		if state.ContextLabel != "" || state.StatsLabel != "" {
+			return state
 		}
-		return renderHeader(a.width, contextLabel, statsLabel)
 	}
 
-	if a.currentScreen == ScreenSkills && a.skillList != nil {
-		total, ready, invalid := a.skillList.GetStats()
-		ctx := a.skillList.GetContext()
-		contextLabel := "All Skills"
-		if ctx.Type == ContextProject {
-			contextLabel = ctx.Value
-		}
-		statsLabel := formatSkillSummary(a.width, total, ready, invalid)
-		if a.inputMode == InputSearch {
-			filtered, total := a.skillList.GetFilterStats()
-			return renderHeaderWithFilter(a.width, contextLabel, statsLabel, filtered, total)
-		}
-		return renderHeader(a.width, contextLabel, statsLabel)
+	return ResourceHeaderState{
+		ContextLabel: "0 projects",
+		StatsLabel:   "0 sessions / 0 active",
 	}
-
-	if a.currentScreen == ScreenAgents && a.agentList != nil {
-		total, ready, invalid := a.agentList.GetStats()
-		ctx := a.agentList.GetContext()
-		contextLabel := "All Agents"
-		if ctx.Type == ContextProject {
-			contextLabel = ctx.Value
-		}
-		statsLabel := formatAgentSummary(a.width, total, ready, invalid)
-		if a.agentList.HasLoadError() {
-			statsLabel = "load error"
-		}
-		if a.inputMode == InputSearch {
-			filtered, total := a.agentList.GetFilterStats()
-			return renderHeaderWithFilter(a.width, contextLabel, statsLabel, filtered, total)
-		}
-		return renderHeader(a.width, contextLabel, statsLabel)
-	}
-
-	if a.sessionList != nil {
-		ctx := a.sessionList.GetContext()
-		summary := summarizeGlobalSessions(a.sessionList.sessions)
-		var contextLabel string
-		if ctx.Type == ContextAll {
-			contextLabel = "All Projects"
-		} else {
-			contextLabel = ctx.Value
-		}
-		statsLabel := formatLifecycleSummary(a.width, summary)
-		if a.inputMode == InputSearch {
-			filtered, total := a.sessionList.GetFilterStats()
-			return renderHeaderWithFilter(a.width, contextLabel, statsLabel, filtered, total)
-		}
-		return renderHeader(a.width, contextLabel, statsLabel)
-	}
-
-	return renderHeader(a.width, "0 projects", "0 sessions / 0 active")
 }
 
 // renderBody renders the body area content
@@ -725,31 +548,7 @@ func (a *AppModel) renderBody(width, height int) string {
 	// Priority: dialog > detail > log > help > session/project
 
 	// Render background content
-	var background string
-	switch a.currentScreen {
-	case ScreenProjects:
-		background = a.projectList.View(width, height)
-	case ScreenSessions:
-		if a.sessionList != nil {
-			background = a.sessionList.View(width, height)
-		} else {
-			background = renderCenteredText("Session list not initialized", width, height)
-		}
-	case ScreenSkills:
-		if a.skillList != nil {
-			background = a.skillList.View(width, height)
-		} else {
-			background = renderCenteredText("Skill list not initialized", width, height)
-		}
-	case ScreenAgents:
-		if a.agentList != nil {
-			background = a.agentList.View(width, height)
-		} else {
-			background = renderCenteredText("Agent list not initialized", width, height)
-		}
-	default:
-		background = renderCenteredText("Unknown screen", width, height)
-	}
+	background := a.renderCurrentView(width, height)
 
 	// Dialog overlay (highest priority)
 	if a.showingDialog && a.confirmDialog != nil {
@@ -802,7 +601,7 @@ func (a *AppModel) renderBody(width, height int) string {
 
 	// Help panel
 	if a.showHelp {
-		return renderHelp(width, height)
+		return renderHelp(width, height, a.resourceRegistry, a.currentResourceDescriptor())
 	}
 
 	// Normal view
@@ -855,14 +654,14 @@ func overlayDialog(background, dialogBox string, width, height int) string {
 // resolveFooterContext resolves the current footer state machine context
 func (a *AppModel) resolveFooterContext() FooterContext {
 	ctx := FooterContext{
-		Screen: a.currentScreen,
-		Mode:   FooterModeNormal,
+		Resource:   a.currentResource,
+		Descriptor: a.currentResourceDescriptor(),
+		Mode:       FooterModeNormal,
 	}
 
 	// Multi-select state
 	if a.sessionList != nil {
 		ctx.HasMulti = a.sessionList.HasSelection()
-		ctx.SelCount = a.sessionList.SelectedCount()
 	}
 
 	// Overlay priority: Dialog > Help > Detail > Log
@@ -902,6 +701,63 @@ func (a *AppModel) resolveFooterContext() FooterContext {
 
 	// Normal mode
 	return ctx
+}
+
+func (a *AppModel) updateCurrentView(msg tea.Msg) tea.Cmd {
+	switch a.currentResource {
+	case ResourceProjects:
+		return a.projectList.Update(msg)
+	case ResourceSessions:
+		if a.sessionList != nil {
+			return a.sessionList.Update(msg)
+		}
+	case ResourceSkills:
+		if a.skillList != nil {
+			return a.skillList.Update(msg)
+		}
+	case ResourceAgents:
+		if a.agentList != nil {
+			return a.agentList.Update(msg)
+		}
+	}
+	return nil
+}
+
+func (a *AppModel) syncDetailOverlaysAfterLoad(msg tea.Msg) {
+	if _, ok := msg.(skillsLoadedMsg); ok && a.showingSkillDetail && a.skillDetailView != nil && a.skillList != nil {
+		if skill, found := a.skillList.GetSelectedSkill(); found {
+			a.skillDetailView.skill = skill
+		}
+	}
+	if _, ok := msg.(agentsLoadedMsg); ok && a.showingAgentDetail && a.agentDetailView != nil && a.agentList != nil {
+		if agent, found := a.agentList.GetSelectedAgent(); found {
+			a.agentDetailView.agent = agent
+		}
+	}
+}
+
+func (a *AppModel) renderCurrentView(width, height int) string {
+	switch a.currentResource {
+	case ResourceProjects:
+		return a.projectList.View(width, height)
+	case ResourceSessions:
+		if a.sessionList != nil {
+			return a.sessionList.View(width, height)
+		}
+		return renderCenteredText("Session list not initialized", width, height)
+	case ResourceSkills:
+		if a.skillList != nil {
+			return a.skillList.View(width, height)
+		}
+		return renderCenteredText("Skill list not initialized", width, height)
+	case ResourceAgents:
+		if a.agentList != nil {
+			return a.agentList.View(width, height)
+		}
+		return renderCenteredText("Agent list not initialized", width, height)
+	default:
+		return renderCenteredText("Unknown screen", width, height)
+	}
 }
 
 // renderFooter renders the footer
@@ -998,37 +854,7 @@ func (a *AppModel) handleCommandInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 // handleTabCompletion handles Tab completion
 func (a *AppModel) handleTabCompletion() {
 	input := a.commandInput.Value()
-	segments := strings.Fields(input)
-
-	var candidates []string
-	var prefix string
-
-	if len(segments) == 0 {
-		return
-	}
-
-	if len(segments) == 1 {
-		// First segment: command name completion
-		prefix = segments[0]
-		commands := []string{"sessions", "projects", "skills", "context"}
-		commands = append(commands, "agents")
-		for _, cmd := range commands {
-			if strings.HasPrefix(cmd, prefix) {
-				candidates = append(candidates, cmd)
-			}
-		}
-	} else if len(segments) >= 2 && segments[0] == "context" {
-		// context command: project name completion
-		prefix = segments[len(segments)-1]
-		if a.projectList != nil {
-			for _, proj := range a.projectList.projects {
-				if strings.HasPrefix(proj.Name, prefix) {
-					candidates = append(candidates, proj.Name)
-				}
-			}
-		}
-	}
-
+	candidates, _, replaceAll := a.commandCompletionCandidates(input, false)
 	if len(candidates) == 0 {
 		return
 	}
@@ -1041,10 +867,11 @@ func (a *AppModel) handleTabCompletion() {
 	a.tabCompletionIndex++
 
 	// Build new input value
-	if len(segments) == 1 {
+	if replaceAll {
 		// Add space after command name completion
 		a.commandInput.SetValue(selected + " ")
 	} else {
+		segments := strings.Fields(input)
 		// Project name completion: replace last segment
 		prefix := strings.Join(segments[:len(segments)-1], " ")
 		a.commandInput.SetValue(prefix + " " + selected + " ")
@@ -1056,41 +883,55 @@ func (a *AppModel) handleTabCompletion() {
 
 // getCompletionSuggestion gets the completion suggestion text for the current input
 func (a *AppModel) getCompletionSuggestion() string {
-	input := a.commandInput.Value()
-	segments := strings.Fields(input)
-
-	if len(segments) == 0 {
-		return ""
-	}
-
-	var candidates []string
-	var prefix string
-
-	if len(segments) == 1 {
-		prefix = segments[0]
-		commands := []string{"sessions", "projects", "skills", "agents", "context"}
-		for _, cmd := range commands {
-			if strings.HasPrefix(cmd, prefix) && cmd != prefix {
-				candidates = append(candidates, cmd)
-			}
-		}
-	} else if len(segments) >= 2 && segments[0] == "context" {
-		prefix = segments[len(segments)-1]
-		if a.projectList != nil {
-			for _, proj := range a.projectList.projects {
-				if strings.HasPrefix(proj.Name, prefix) && proj.Name != prefix {
-					candidates = append(candidates, proj.Name)
-				}
-			}
-		}
-	}
-
+	candidates, prefix, _ := a.commandCompletionCandidates(a.commandInput.Value(), true)
 	if len(candidates) == 0 {
 		return ""
 	}
 
 	// Take the first matching completion
 	return candidates[0][len(prefix):]
+}
+
+func (a *AppModel) commandCompletionCandidates(input string, excludeExact bool) ([]string, string, bool) {
+	segments := strings.Fields(input)
+	if len(segments) == 0 {
+		return nil, "", false
+	}
+
+	if len(segments) == 1 {
+		prefix := segments[0]
+		commands := append(a.resourceRegistry.CompletionCandidates(prefix), "context")
+		candidates := make([]string, 0, len(commands))
+		for _, cmd := range commands {
+			if !strings.HasPrefix(cmd, prefix) {
+				continue
+			}
+			if excludeExact && cmd == prefix {
+				continue
+			}
+			candidates = append(candidates, cmd)
+		}
+		return candidates, prefix, true
+	}
+
+	if len(segments) >= 2 && segments[0] == "context" {
+		prefix := segments[len(segments)-1]
+		candidates := make([]string, 0)
+		if a.projectList != nil {
+			for _, proj := range a.projectList.projects {
+				if !strings.HasPrefix(proj.Name, prefix) {
+					continue
+				}
+				if excludeExact && proj.Name == prefix {
+					continue
+				}
+				candidates = append(candidates, proj.Name)
+			}
+		}
+		return candidates, prefix, false
+	}
+
+	return nil, "", false
 }
 
 // renderCommandLine custom renders the command line (with inline suggestion)
@@ -1133,23 +974,12 @@ func (a *AppModel) executeCommand(cmdStr string) tea.Cmd {
 	}
 
 	switch parts[0] {
-	case "sessions":
-		return func() tea.Msg { return SwitchResourceMsg{Resource: ResourceSessions} }
-	case "projects":
-		return func() tea.Msg { return SwitchResourceMsg{Resource: ResourceProjects} }
-	case "skills":
-		return func() tea.Msg { return SwitchResourceMsg{Resource: ResourceSkills} }
-	case "agents":
-		return func() tea.Msg { return SwitchResourceMsg{Resource: ResourceAgents} }
 	case "context":
 		// :context all | :context <project-name>
 		if len(parts) < 2 {
-			ctx := a.getSessionContext()
-			if a.currentScreen == ScreenSkills {
-				ctx = a.getSkillContext()
-			}
-			if a.currentScreen == ScreenAgents {
-				ctx = a.getAgentContext()
+			ctx := Context{Type: ContextAll}
+			if getContext := a.currentResourceDescriptor().CurrentContext; getContext != nil {
+				ctx = getContext(a)
 			}
 			if ctx.Type == ContextAll {
 				a.SetFlash("Current context: all", false, 2*time.Second)
@@ -1168,57 +998,37 @@ func (a *AppModel) executeCommand(cmdStr string) tea.Cmd {
 			return SwitchContextMsg{Context: Context{Type: ContextProject, Value: parts[1]}}
 		}
 	default:
+		if descriptor, ok := a.resourceRegistry.FindByCommand(parts[0]); ok {
+			return func() tea.Msg { return SwitchResourceMsg{Resource: descriptor.Resource} }
+		}
 		a.SetFlash(fmt.Sprintf("Unknown command: %s", parts[0]), true, 3*time.Second)
 		return nil
 	}
 }
 
+func (a *AppModel) currentResourceDescriptor() ResourceDescriptor {
+	return a.resourceRegistry.MustGet(a.currentResource)
+}
+
+func (a *AppModel) setActiveResource(resource ResourceType) {
+	a.currentResource = resource
+}
+
 // applySearchToCurrentView applies the search query to the current view
 func (a *AppModel) applySearchToCurrentView(query string) {
-	switch a.currentScreen {
-	case ScreenProjects:
-		a.projectList.ApplyFilter(query)
-	case ScreenSessions:
-		if a.sessionList != nil {
-			a.sessionList.ApplyFilter(query)
-		}
-	case ScreenSkills:
-		if a.skillList != nil {
-			a.skillList.ApplyFilter(query)
-		}
-	case ScreenAgents:
-		if a.agentList != nil {
-			a.agentList.ApplyFilter(query)
-		}
+	if applyFilter := a.currentResourceDescriptor().ApplyFilter; applyFilter != nil {
+		applyFilter(a, query)
 	}
 }
 
 func (a *AppModel) clearActiveSearch() bool {
-	switch a.currentScreen {
-	case ScreenProjects:
-		if a.projectList != nil && a.projectList.HasActiveFilter() {
-			a.searchInput.SetValue("")
-			a.projectList.ApplyFilter("")
-			return true
+	descriptor := a.currentResourceDescriptor()
+	if descriptor.HasActiveFilter != nil && descriptor.HasActiveFilter(a) {
+		a.searchInput.SetValue("")
+		if descriptor.ApplyFilter != nil {
+			descriptor.ApplyFilter(a, "")
 		}
-	case ScreenSessions:
-		if a.sessionList != nil && a.sessionList.HasActiveFilter() {
-			a.searchInput.SetValue("")
-			a.sessionList.ApplyFilter("")
-			return true
-		}
-	case ScreenSkills:
-		if a.skillList != nil && a.skillList.HasActiveFilter() {
-			a.searchInput.SetValue("")
-			a.skillList.ApplyFilter("")
-			return true
-		}
-	case ScreenAgents:
-		if a.agentList != nil && a.agentList.HasActiveFilter() {
-			a.searchInput.SetValue("")
-			a.agentList.ApplyFilter("")
-			return true
-		}
+		return true
 	}
 	return false
 }
@@ -1236,6 +1046,21 @@ func formatLifecycleSummary(width int, summary claudefs.LifecycleSummary) string
 		return fmt.Sprintf("%d sessions / A:%d I:%d C:%d S:%d", summary.Total, summary.Active, summary.Idle, summary.Completed, summary.Stale)
 	}
 	return fmt.Sprintf("%d sessions / %d active / %d idle / %d completed / %d stale", summary.Total, summary.Active, summary.Idle, summary.Completed, summary.Stale)
+}
+
+func formatProjectContextLabel(projectCount int) string {
+	return fmt.Sprintf("%d projects", projectCount)
+}
+
+func formatProjectSummary(totalSessions, activeCount int) string {
+	return fmt.Sprintf("%d sessions / %d active", totalSessions, activeCount)
+}
+
+func formatResourceContextLabel(allLabel string, ctx Context) string {
+	if ctx.Type == ContextProject {
+		return ctx.Value
+	}
+	return allLabel
 }
 
 func formatSkillSummary(width, total, ready, invalid int) string {
