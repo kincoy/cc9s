@@ -22,19 +22,9 @@ const (
 
 // SkillListModel skill list view model.
 type SkillListModel struct {
-	context         Context
-	skills          []claudefs.SkillResource
-	allSkills       []claudefs.SkillResource
-	contextSkills   []claudefs.SkillResource
-	filterQuery     string
-	cursor          int
-	loading         bool
-	sortBy          SkillSortField
-	sortAsc         bool
-	readyCount      int
-	invalidCount    int
-	restoreSkillKey string
-	restoreCursor   int
+	state   DefaultResourceListState[claudefs.SkillResource]
+	sortBy  SkillSortField
+	sortAsc bool
 }
 
 type skillsLoadedMsg struct {
@@ -44,8 +34,7 @@ type skillsLoadedMsg struct {
 // NewSkillListModel creates a new skill list model.
 func NewSkillListModel() *SkillListModel {
 	return &SkillListModel{
-		context: Context{Type: ContextAll},
-		loading: true,
+		state:   NewDefaultResourceListState[claudefs.SkillResource](),
 		sortBy:  SortBySkillName,
 		sortAsc: true,
 	}
@@ -62,48 +51,44 @@ func scanSkillsCmd() tea.Msg {
 func (m *SkillListModel) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case skillsLoadedMsg:
-		m.loading = false
-		m.allSkills = msg.result.Skills
-		m.readyCount = msg.result.ReadyCount
-		m.invalidCount = msg.result.InvalidCount
-		m.sortSkills(m.allSkills)
-		m.applyContext()
-		m.restoreCursorAfterReload()
+		items := append([]claudefs.SkillResource(nil), msg.result.Skills...)
+		m.sortSkills(items)
+		m.state.SetItems(items, m.skillHooks())
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "j", "down":
-			if m.cursor < len(m.skills)-1 {
-				m.cursor++
+			if m.state.Cursor < len(m.state.VisibleItems)-1 {
+				m.state.Cursor++
 			}
 		case "k", "up":
-			if m.cursor > 0 {
-				m.cursor--
+			if m.state.Cursor > 0 {
+				m.state.Cursor--
 			}
 		case "G":
-			if len(m.skills) > 0 {
-				m.cursor = len(m.skills) - 1
+			if len(m.state.VisibleItems) > 0 {
+				m.state.Cursor = len(m.state.VisibleItems) - 1
 			}
 		case "g":
-			m.cursor = 0
+			m.state.Cursor = 0
 		case "s":
 			m.sortBy = (m.sortBy + 1) % 4
-			m.sortSkills(m.allSkills)
+			m.sortSkills(m.state.AllItems)
 			m.applyContext()
 		case "S":
 			m.sortAsc = !m.sortAsc
-			m.sortSkills(m.allSkills)
+			m.sortSkills(m.state.AllItems)
 			m.applyContext()
 		case "d":
-			if len(m.skills) > 0 {
+			if len(m.state.VisibleItems) > 0 {
 				return func() tea.Msg {
-					return ShowSkillDetailMsg{Skill: m.skills[m.cursor]}
+					return ShowSkillDetailMsg{Skill: m.state.VisibleItems[m.state.Cursor]}
 				}
 			}
 		case "e", "E":
-			if len(m.skills) > 0 {
+			if len(m.state.VisibleItems) > 0 {
 				return func() tea.Msg {
-					return EditSkillMsg{Skill: m.skills[m.cursor]}
+					return EditSkillMsg{Skill: m.state.VisibleItems[m.state.Cursor]}
 				}
 			}
 		}
@@ -113,42 +98,40 @@ func (m *SkillListModel) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *SkillListModel) GetContext() Context {
-	return m.context
+	return m.state.Context
 }
 
 func (m *SkillListModel) SetContext(ctx Context) tea.Cmd {
-	m.context = ctx
-	m.filterQuery = ""
-	m.applyContext()
+	m.state.SetContext(ctx, m.skillHooks())
 	return nil
 }
 
 func (m *SkillListModel) Reload() tea.Cmd {
-	m.captureCursorForReload()
+	m.state.CaptureCursorForReload(m.skillHooks())
+	m.state.Loading = true
 	return scanSkillsCmd
 }
 
 func (m *SkillListModel) View(width, height int) string {
-	if m.loading {
+	if m.state.Loading {
 		return renderCenteredText("Loading skills...", width, height)
 	}
 
-	if len(m.skills) == 0 {
-		if m.context.Type == ContextProject {
+	if len(m.state.VisibleItems) == 0 {
+		if m.state.Context.Type == ContextProject {
 			return renderCenteredText(
-				"No skills found in project: "+m.context.Value,
+				"No skills found in project: "+m.state.Context.Value,
 				width, height,
 			)
 		}
 		return renderCenteredText("No skills found", width, height)
 	}
 
-	return renderSkillTable(m.skills, m.cursor, width, height, m.sortBy, m.sortAsc, m.ShowProjectColumn())
+	return renderSkillTable(m.state.VisibleItems, m.state.Cursor, width, height, m.sortBy, m.sortAsc, m.ShowProjectColumn())
 }
 
 func (m *SkillListModel) ApplyFilter(query string) {
-	m.filterQuery = query
-	m.applyFilter()
+	m.state.ApplyFilter(query, m.skillHooks())
 }
 
 func (m *SkillListModel) ShowProjectColumn() bool {
@@ -156,66 +139,19 @@ func (m *SkillListModel) ShowProjectColumn() bool {
 }
 
 func (m *SkillListModel) captureCursorForReload() {
-	m.restoreSkillKey = ""
-	m.restoreCursor = m.cursor
-	if m.cursor >= 0 && m.cursor < len(m.skills) {
-		m.restoreSkillKey = skillCursorKey(m.skills[m.cursor])
-	}
+	m.state.CaptureCursorForReload(m.skillHooks())
 }
 
 func (m *SkillListModel) restoreCursorAfterReload() {
-	defer func() {
-		m.restoreSkillKey = ""
-		m.restoreCursor = 0
-	}()
-
-	if len(m.skills) == 0 {
-		m.cursor = 0
-		return
-	}
-	if m.restoreSkillKey != "" {
-		for i, skill := range m.skills {
-			if skillCursorKey(skill) == m.restoreSkillKey {
-				m.cursor = i
-				return
-			}
-		}
-	}
-	m.cursor = m.restoreCursor
-	m.clampCursor()
+	m.state.RestoreCursorAfterReload(m.skillHooks())
 }
 
 func (m *SkillListModel) applyContext() {
-	if m.context.Type == ContextAll {
-		m.contextSkills = append([]claudefs.SkillResource(nil), m.allSkills...)
-	} else {
-		filtered := make([]claudefs.SkillResource, 0)
-		for _, skill := range m.allSkills {
-			if skillAvailableInContext(skill, m.context) {
-				filtered = append(filtered, skill)
-			}
-		}
-		m.contextSkills = filtered
-	}
-	m.applyFilter()
+	m.state.rebuild(m.skillHooks())
 }
 
 func (m *SkillListModel) applyFilter() {
-	q := normalizeResourceSearchQuery(m.filterQuery)
-	if q == "" {
-		m.skills = append([]claudefs.SkillResource(nil), m.contextSkills...)
-		m.clampCursor()
-		return
-	}
-
-	var filtered []claudefs.SkillResource
-	for _, skill := range m.contextSkills {
-		if skillMatchesQuery(skill, q) {
-			filtered = append(filtered, skill)
-		}
-	}
-	m.skills = filtered
-	m.clampCursor()
+	m.state.ApplyFilter(m.state.FilterQuery, m.skillHooks())
 }
 
 func skillMatchesQuery(skill claudefs.SkillResource, query string) bool {
@@ -288,32 +224,26 @@ func (m *SkillListModel) sortSkills(skills []claudefs.SkillResource) {
 }
 
 func (m *SkillListModel) clampCursor() {
-	if len(m.skills) == 0 {
-		m.cursor = 0
-		return
-	}
-	if m.cursor >= len(m.skills) {
-		m.cursor = len(m.skills) - 1
-	}
+	m.state.ClampCursor()
 }
 
 func (m *SkillListModel) GetStats() (total, ready, invalid int) {
-	for _, skill := range m.contextSkills {
+	for _, skill := range m.state.ContextItems {
 		if skill.Status == claudefs.SkillStatusReady {
 			ready++
 		} else {
 			invalid++
 		}
 	}
-	return len(m.contextSkills), ready, invalid
+	return len(m.state.ContextItems), ready, invalid
 }
 
 func (m *SkillListModel) GetFilterStats() (filtered, total int) {
-	return len(m.skills), len(m.contextSkills)
+	return m.state.FilterStats()
 }
 
 func (m *SkillListModel) HasActiveFilter() bool {
-	return strings.TrimSpace(normalizeResourceSearchQuery(m.filterQuery)) != ""
+	return m.state.HasActiveFilter()
 }
 
 func skillCursorKey(skill claudefs.SkillResource) string {
@@ -339,8 +269,16 @@ func skillAvailableInContext(skill claudefs.SkillResource, ctx Context) bool {
 }
 
 func (m *SkillListModel) GetSelectedSkill() (claudefs.SkillResource, bool) {
-	if len(m.skills) == 0 || m.cursor < 0 || m.cursor >= len(m.skills) {
+	if len(m.state.VisibleItems) == 0 || m.state.Cursor < 0 || m.state.Cursor >= len(m.state.VisibleItems) {
 		return claudefs.SkillResource{}, false
 	}
-	return m.skills[m.cursor], true
+	return m.state.VisibleItems[m.state.Cursor], true
+}
+
+func (m *SkillListModel) skillHooks() DefaultResourceHooks[claudefs.SkillResource] {
+	return DefaultResourceHooks[claudefs.SkillResource]{
+		CursorKey:    skillCursorKey,
+		InContext:    skillAvailableInContext,
+		MatchesQuery: skillMatchesQuery,
+	}
 }

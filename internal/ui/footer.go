@@ -29,12 +29,12 @@ const (
 
 // FooterContext footer state machine context
 type FooterContext struct {
-	Screen        Screen
+	Resource      ResourceType
+	Descriptor    ResourceDescriptor
 	Mode          FooterMode
 	Overlay       OverlayType
 	DialogIsAlert bool
 	HasMulti      bool
-	SelCount      int
 }
 
 // KeyHint keyboard shortcut hint
@@ -64,7 +64,7 @@ func hintsForContext(ctx FooterContext) []KeyHint {
 		}
 
 	case OverlayDetail:
-		if ctx.Screen == ScreenSkills || ctx.Screen == ScreenAgents {
+		if ctx.Descriptor.Capabilities.SupportsEdit {
 			return []KeyHint{
 				{Key: "e", Label: "Edit"},
 				{Key: "Esc", Label: "Close detail"},
@@ -101,69 +101,8 @@ func hintsForContext(ctx FooterContext) []KeyHint {
 		}
 	}
 
-	// Normal mode, by Screen
-	switch ctx.Screen {
-	case ScreenProjects:
-		return []KeyHint{
-			{Key: "q", Label: "Quit"},
-			{Key: "j/k", Label: "Navigate"},
-			{Key: "s/S", Label: "Sort"},
-			{Key: "Enter", Label: "Open"},
-			{Key: "d", Label: "Detail"},
-			{Key: "/", Label: "Search"},
-			{Key: ":", Label: "Cmd"},
-			{Key: "?", Label: "Help"},
-		}
-
-	case ScreenSessions:
-		hints := []KeyHint{
-			{Key: "q", Label: "Quit"},
-			{Key: "j/k", Label: "Navigate"},
-			{Key: "s/S", Label: "Sort"},
-			{Key: "Enter", Label: "Resume"},
-			{Key: "d", Label: "Detail"},
-			{Key: "l", Label: "Logs"},
-			{Key: "Space", Label: "Select"},
-			{Key: "/", Label: "Search"},
-			{Key: ":", Label: "Cmd"},
-			{Key: "Esc", Label: "Back"},
-		}
-
-		// Append multi-select hint
-		if ctx.HasMulti {
-			hints = append(hints, KeyHint{Key: "Ctrl+D", Label: "Delete"})
-		}
-
-		hints = append(hints, KeyHint{Key: "0", Label: "All ctx"})
-		hints = append(hints, KeyHint{Key: "?", Label: "Help"})
-
-		return hints
-
-	case ScreenSkills:
-		return []KeyHint{
-			{Key: "q", Label: "Quit"},
-			{Key: "j/k", Label: "Navigate"},
-			{Key: "s/S", Label: "Sort"},
-			{Key: "d", Label: "Detail"},
-			{Key: "e", Label: "Edit"},
-			{Key: "/", Label: "Search"},
-			{Key: ":", Label: "Cmd"},
-			{Key: "0", Label: "All ctx"},
-			{Key: "?", Label: "Help"},
-		}
-
-	case ScreenAgents:
-		return []KeyHint{
-			{Key: "q", Label: "Quit"},
-			{Key: "j/k", Label: "Navigate"},
-			{Key: "s/S", Label: "Sort"},
-			{Key: "d", Label: "Detail"},
-			{Key: "e", Label: "Edit"},
-			{Key: "/", Label: "Search"},
-			{Key: ":", Label: "Cmd"},
-			{Key: "0", Label: "All ctx"},
-			{Key: "?", Label: "Help"},
-		}
+	if ctx.Descriptor.FooterHints != nil {
+		return ctx.Descriptor.FooterHints(ctx)
 	}
 
 	// Default
