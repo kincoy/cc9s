@@ -35,12 +35,19 @@ type SessionLifecycleSnapshot struct {
 
 // Project represents a Claude Code project.
 type Project struct {
-	Name         string    // Project name (last path segment, e.g. "cc9s")
-	Path         string    // Full decoded path (e.g. "/Users/kinco/go/src/...")
-	EncodedPath  string    // Encoded directory name (for filesystem lookup)
-	SessionCount int       // Number of sessions
-	LastActiveAt time.Time // Most recent session active time
-	TotalSize    int64     // Total size of all JSONL files (bytes)
+	Name               string    // Project name (last path segment, e.g. "cc9s")
+	Path               string    // Full decoded path (e.g. "/Users/kinco/go/src/...")
+	EncodedPath        string    // Encoded directory name (for filesystem lookup)
+	SessionCount       int       // Number of sessions
+	ActiveSessionCount int       // Number of active sessions
+	LastActiveAt       time.Time // Most recent session active time
+	TotalSize          int64     // Total size of all JSONL files (bytes)
+	SkillCount         int       // Number of local project skills
+	CommandCount       int       // Number of local project commands
+	AgentCount         int       // Number of local project agents
+	HasSkillsRoot      bool      // Whether .claude/skills exists
+	HasCommandsRoot    bool      // Whether .claude/commands exists
+	HasAgentsRoot      bool      // Whether .claude/agents exists
 }
 
 // Session represents a Claude Code session.

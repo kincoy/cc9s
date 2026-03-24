@@ -53,6 +53,14 @@ type ShowDetailMsg struct {
 // CloseDetailMsg closes the detail panel
 type CloseDetailMsg struct{}
 
+// ShowProjectDetailMsg shows project detail panel.
+type ShowProjectDetailMsg struct {
+	Project claudefs.Project
+}
+
+// CloseProjectDetailMsg closes the project detail panel.
+type CloseProjectDetailMsg struct{}
+
 // ShowSkillDetailMsg shows skill detail panel.
 type ShowSkillDetailMsg struct {
 	Skill claudefs.SkillResource

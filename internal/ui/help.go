@@ -26,6 +26,7 @@ func renderHelp(width, height int) string {
 		"  " + styles.FooterKeyStyle.Render("g") + styles.FooterStyle.Render("         Go to top"),
 		"  " + styles.FooterKeyStyle.Render("G") + styles.FooterStyle.Render("         Go to bottom"),
 		"  " + styles.FooterKeyStyle.Render("Enter") + styles.FooterStyle.Render("     Open project / Resume session"),
+		"  " + styles.FooterKeyStyle.Render("d") + styles.FooterStyle.Render("         View selected project details"),
 		"  " + styles.FooterKeyStyle.Render("Esc") + styles.FooterStyle.Render("       Go back / Cancel"),
 		"",
 		"  " + styles.HeaderStyle.Render("Sorting"),

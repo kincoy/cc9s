@@ -77,15 +77,23 @@ func scanProjectsDir(projectsDir string, activeMarkers map[string]activeSessionI
 		// Scan session files under this project
 		projectDir := filepath.Join(projectsDir, encodedPath)
 		sessionCount, totalSize, lastActive, projectActiveCount := scanProjectSessions(projectDir, activeMarkers, now)
+		resourceSummary := summarizeProjectResources(decodedPath)
 
 		if sessionCount > 0 {
 			projects = append(projects, Project{
-				Name:         projectName,
-				Path:         decodedPath,
-				EncodedPath:  encodedPath,
-				SessionCount: sessionCount,
-				LastActiveAt: lastActive,
-				TotalSize:    totalSize,
+				Name:               projectName,
+				Path:               decodedPath,
+				EncodedPath:        encodedPath,
+				SessionCount:       sessionCount,
+				ActiveSessionCount: projectActiveCount,
+				LastActiveAt:       lastActive,
+				TotalSize:          totalSize,
+				SkillCount:         resourceSummary.SkillCount,
+				CommandCount:       resourceSummary.CommandCount,
+				AgentCount:         resourceSummary.AgentCount,
+				HasSkillsRoot:      resourceSummary.HasSkillsRoot,
+				HasCommandsRoot:    resourceSummary.HasCommandsRoot,
+				HasAgentsRoot:      resourceSummary.HasAgentsRoot,
 			})
 			totalSessions += sessionCount
 			activeCount += projectActiveCount
@@ -142,6 +150,76 @@ func scanProjectSessions(projectDir string, activeMarkers map[string]activeSessi
 	}
 
 	return count, totalSize, lastActive, activeCount
+}
+
+type projectResourceSummary struct {
+	SkillCount      int
+	CommandCount    int
+	AgentCount      int
+	HasSkillsRoot   bool
+	HasCommandsRoot bool
+	HasAgentsRoot   bool
+}
+
+func summarizeProjectResources(projectPath string) projectResourceSummary {
+	projectPath = strings.TrimSpace(projectPath)
+	if projectPath == "" {
+		return projectResourceSummary{}
+	}
+
+	skillsRoot := filepath.Join(projectPath, ".claude", "skills")
+	commandsRoot := filepath.Join(projectPath, ".claude", "commands")
+	agentsRoot := filepath.Join(projectPath, ".claude", "agents")
+
+	skillCount, hasSkillsRoot := countProjectSkillResources(skillsRoot)
+	commandCount, hasCommandsRoot := countMarkdownResources(commandsRoot)
+	agentCount, hasAgentsRoot := countMarkdownResources(agentsRoot)
+
+	return projectResourceSummary{
+		SkillCount:      skillCount,
+		CommandCount:    commandCount,
+		AgentCount:      agentCount,
+		HasSkillsRoot:   hasSkillsRoot,
+		HasCommandsRoot: hasCommandsRoot,
+		HasAgentsRoot:   hasAgentsRoot,
+	}
+}
+
+func countProjectSkillResources(root string) (count int, exists bool) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return 0, false
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			count++
+			continue
+		}
+		if strings.EqualFold(filepath.Ext(entry.Name()), ".md") {
+			count++
+		}
+	}
+
+	return count, true
+}
+
+func countMarkdownResources(root string) (count int, exists bool) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return 0, false
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if strings.EqualFold(filepath.Ext(entry.Name()), ".md") {
+			count++
+		}
+	}
+
+	return count, true
 }
 
 // LoadProjectSessions loads all sessions under a project.

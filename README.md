@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go" alt="Go version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
-  <a href="https://github.com/kincoy/cc9s/releases"><img src="https://img.shields.io/badge/Release-v0.1.2-green.svg" alt="Release"></a>
+  <a href="https://github.com/kincoy/cc9s/releases"><img src="https://img.shields.io/badge/Release-v0.1.3-green.svg" alt="Release"></a>
 </p>
 
 <p align="center">
@@ -36,6 +36,7 @@ One common flow:
 ## Features
 
 - **Two-level navigation** — Projects → Sessions, drill down with `Enter`, go back with `Esc`
+- **Project overview** — See local project session, skill, command, and agent summaries, then inspect project paths and local Claude roots with `d`
 - **Session resume** — Jump directly into a Claude Code session from the TUI
 - **Search & filter** — `/` to search, `:context <name>` to filter by project
 - **Batch delete** — `Space` to select, `Ctrl+D` to delete multiple sessions
@@ -166,7 +167,7 @@ On first launch, cc9s scans `~/.claude/projects/` for projects and sessions, the
 | `/` | Search current resource |
 | `s` | Cycle sort field |
 | `S` | Reverse sort order |
-| `d` | View session, skill, or agent details |
+| `d` | View project, session, skill, or agent details |
 | `e` | Edit selected skill, command, or agent file |
 | `Space` | Toggle select session |
 | `Ctrl+D` | Delete selected session(s) |
