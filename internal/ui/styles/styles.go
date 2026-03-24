@@ -38,6 +38,34 @@ var (
 
 	StaleStatusStyle = StaleStyle
 
+	ReadySkillStatusStyle = lipgloss.NewStyle().
+				Foreground(ColorActive).
+				Bold(true)
+
+	InvalidSkillStatusStyle = lipgloss.NewStyle().
+				Foreground(ColorError).
+				Bold(true)
+
+	ProjectSkillSourceStyle = lipgloss.NewStyle().
+				Foreground(ColorHighlight).
+				Bold(true)
+
+	UserSkillSourceStyle = lipgloss.NewStyle().
+				Foreground(ColorCompleted).
+				Bold(true)
+
+	PluginSkillSourceStyle = lipgloss.NewStyle().
+				Foreground(ColorPurple).
+				Bold(true)
+
+	SkillKindBadgeStyle = lipgloss.NewStyle().
+				Foreground(ColorHighlight).
+				Bold(true)
+
+	CommandKindBadgeStyle = lipgloss.NewStyle().
+				Foreground(ColorWarning).
+				Bold(true)
+
 	DialogTitleStyle = lipgloss.NewStyle().
 				Foreground(ColorWarning).
 				Bold(true)

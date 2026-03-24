@@ -7,12 +7,11 @@ import (
 	"github.com/kincoy/cc9s/internal/ui/styles"
 )
 
-
 // FooterMode footer mode
 type FooterMode int
 
 const (
-	FooterModeNormal  FooterMode = iota
+	FooterModeNormal FooterMode = iota
 	FooterModeSearch
 	FooterModeCommand
 )
@@ -65,6 +64,13 @@ func hintsForContext(ctx FooterContext) []KeyHint {
 		}
 
 	case OverlayDetail:
+		if ctx.Screen == ScreenSkills {
+			return []KeyHint{
+				{Key: "e", Label: "Edit"},
+				{Key: "Esc", Label: "Close detail"},
+				{Key: "?", Label: "Help"},
+			}
+		}
 		return []KeyHint{
 			{Key: "Esc", Label: "Close detail"},
 			{Key: "?", Label: "Help"},
@@ -131,6 +137,19 @@ func hintsForContext(ctx FooterContext) []KeyHint {
 		hints = append(hints, KeyHint{Key: "?", Label: "Help"})
 
 		return hints
+
+	case ScreenSkills:
+		return []KeyHint{
+			{Key: "q", Label: "Quit"},
+			{Key: "j/k", Label: "Navigate"},
+			{Key: "s/S", Label: "Sort"},
+			{Key: "d", Label: "Detail"},
+			{Key: "e", Label: "Edit"},
+			{Key: "/", Label: "Search"},
+			{Key: ":", Label: "Cmd"},
+			{Key: "0", Label: "All ctx"},
+			{Key: "?", Label: "Help"},
+		}
 	}
 
 	// Default

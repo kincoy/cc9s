@@ -6,8 +6,8 @@ import "github.com/kincoy/cc9s/internal/claudefs"
 type ContextType int
 
 const (
-	ContextAll      ContextType = iota // Show sessions from all projects
-	ContextProject                     // Show sessions from a specific project
+	ContextAll     ContextType = iota // Show sessions from all projects
+	ContextProject                    // Show sessions from a specific project
 )
 
 // Context session filter context
@@ -52,6 +52,25 @@ type ShowDetailMsg struct {
 
 // CloseDetailMsg closes the detail panel
 type CloseDetailMsg struct{}
+
+// ShowSkillDetailMsg shows skill detail panel.
+type ShowSkillDetailMsg struct {
+	Skill claudefs.SkillResource
+}
+
+// CloseSkillDetailMsg closes the skill detail panel.
+type CloseSkillDetailMsg struct{}
+
+// EditSkillMsg opens the selected skill in an external editor.
+type EditSkillMsg struct {
+	Skill claudefs.SkillResource
+}
+
+// SkillEditorFinishedMsg is emitted after the editor exits.
+type SkillEditorFinishedMsg struct {
+	Skill claudefs.SkillResource
+	Err   error
+}
 
 // statsLoadedMsg session stats loaded
 type statsLoadedMsg struct {

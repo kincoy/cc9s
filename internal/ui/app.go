@@ -19,6 +19,7 @@ type Screen int
 const (
 	ScreenProjects Screen = iota // project list
 	ScreenSessions               // session list (unified, supports context filtering)
+	ScreenSkills                 // skills list
 )
 
 // ResourceType resource type
@@ -27,6 +28,7 @@ type ResourceType int
 const (
 	ResourceProjects ResourceType = iota // projects resource
 	ResourceSessions                     // sessions resource
+	ResourceSkills                       // skills resource
 )
 
 // InputMode input mode
@@ -51,6 +53,7 @@ type AppModel struct {
 	inputMode         InputMode
 	projectList       *ProjectListModel
 	sessionList       *SessionListModel
+	skillList         *SkillListModel
 	lastProjectCursor int // saves the cursor position of the project list
 
 	searchInput  textinput.Model
@@ -65,10 +68,12 @@ type AppModel struct {
 	flashUntil   time.Time
 	flashIsError bool
 
-	showingDetail bool
-	detailView    *DetailViewModel
-	showingLog    bool
-	logView       *LogViewModel
+	showingDetail      bool
+	detailView         *DetailViewModel
+	showingSkillDetail bool
+	skillDetailView    *SkillDetailViewModel
+	showingLog         bool
+	logView            *LogViewModel
 }
 
 // NewAppModel creates a new application Model
@@ -124,6 +129,23 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, cmd
 	}
 
+	// Skill detail view handles message
+	if a.showingSkillDetail && a.skillDetailView != nil {
+		if keyMsg, ok := msg.(tea.KeyPressMsg); ok && (keyMsg.String() == "e" || keyMsg.String() == "E") {
+			return a, editSkillCmd(a.skillDetailView.skill)
+		}
+		cmd := a.skillDetailView.Update(msg)
+		if cmd != nil {
+			resultMsg := cmd()
+			if _, ok := resultMsg.(CloseSkillDetailMsg); ok {
+				a.showingSkillDetail = false
+				a.skillDetailView = nil
+				return a, nil
+			}
+		}
+		return a, cmd
+	}
+
 	// Log view handles message
 	if a.showingLog && a.logView != nil {
 		cmd := a.logView.Update(msg)
@@ -159,6 +181,30 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.detailView = nil
 		return a, nil
 
+	case ShowSkillDetailMsg:
+		a.showingSkillDetail = true
+		a.skillDetailView = NewSkillDetailViewModel(msg.Skill)
+		return a, a.skillDetailView.Init()
+
+	case CloseSkillDetailMsg:
+		a.showingSkillDetail = false
+		a.skillDetailView = nil
+		return a, nil
+
+	case EditSkillMsg:
+		return a, editSkillCmd(msg.Skill)
+
+	case SkillEditorFinishedMsg:
+		if msg.Err != nil && !isSignalError(msg.Err) {
+			a.SetFlash(fmt.Sprintf("Editor exited with error: %v", msg.Err), true, 5*time.Second)
+		} else if msg.Err == nil {
+			a.SetFlash(fmt.Sprintf("Edited skill: %s", msg.Skill.Name), false, 2*time.Second)
+		}
+		if a.skillList != nil {
+			return a, a.skillList.Reload()
+		}
+		return a, nil
+
 	case ShowLogMsg:
 		a.showingLog = true
 		a.logView = NewLogViewModel(msg.Session)
@@ -175,22 +221,45 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case ResourceProjects:
 			a.currentScreen = ScreenProjects
 		case ResourceSessions:
+			targetCtx := a.currentSessionTargetContext()
 			a.currentScreen = ScreenSessions
 			if a.sessionList == nil {
 				a.sessionList = NewSessionListModel()
-				return a, a.sessionList.Init()
+				cmd := a.sessionList.Init()
+				if ctxCmd := a.sessionList.SetContext(targetCtx); ctxCmd != nil {
+					return a, tea.Batch(cmd, ctxCmd)
+				}
+				return a, cmd
 			}
-			// If sessionList already exists, set context=all and refresh
-			cmd := a.sessionList.SetContext(Context{Type: ContextAll})
+			cmd := a.sessionList.SetContext(targetCtx)
+			if cmd != nil {
+				return a, cmd
+			}
+		case ResourceSkills:
+			targetCtx := a.currentSkillTargetContext()
+			a.currentScreen = ScreenSkills
+			if a.skillList == nil {
+				a.skillList = NewSkillListModel()
+				cmd := a.skillList.Init()
+				if ctxCmd := a.skillList.SetContext(targetCtx); ctxCmd != nil {
+					return a, tea.Batch(cmd, ctxCmd)
+				}
+				return a, cmd
+			}
+			cmd := a.skillList.SetContext(targetCtx)
 			if cmd != nil {
 				return a, cmd
 			}
 		}
 
 	case SwitchContextMsg:
-		if a.sessionList != nil {
+		if a.currentScreen == ScreenSessions && a.sessionList != nil {
 			a.currentScreen = ScreenSessions
 			return a, a.sessionList.SetContext(msg.Context)
+		}
+		if a.currentScreen == ScreenSkills && a.skillList != nil {
+			a.currentScreen = ScreenSkills
+			return a, a.skillList.SetContext(msg.Context)
 		}
 
 	case DeleteSessionsMsg:
@@ -259,6 +328,10 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Quit
 		case "?":
 			a.showHelp = !a.showHelp
+		case "esc":
+			if a.clearActiveSearch() {
+				return a, nil
+			}
 		case "/":
 			a.inputMode = InputSearch
 			a.searchInput.SetValue("")
@@ -270,9 +343,11 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.commandInput.Focus()
 			return a, nil
 		case "0":
-			// Shortcut to switch to context=all
-			return a, func() tea.Msg {
-				return SwitchContextMsg{Context: Context{Type: ContextAll}}
+			if a.currentScreen == ScreenSessions || a.currentScreen == ScreenSkills {
+				// Shortcut to switch to context=all
+				return a, func() tea.Msg {
+					return SwitchContextMsg{Context: Context{Type: ContextAll}}
+				}
 			}
 		}
 	}
@@ -315,6 +390,17 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.currentScreen = ScreenProjects
 				return a, nil
 			}
+		}
+
+	case ScreenSkills:
+		if a.skillList != nil {
+			cmd = a.skillList.Update(msg)
+		}
+	}
+
+	if _, ok := msg.(skillsLoadedMsg); ok && a.showingSkillDetail && a.skillDetailView != nil && a.skillList != nil {
+		if skill, found := a.skillList.GetSelectedSkill(); found {
+			a.skillDetailView.skill = skill
 		}
 	}
 
@@ -409,6 +495,39 @@ func (a *AppModel) getSessionContext() Context {
 	return Context{Type: ContextAll}
 }
 
+func (a *AppModel) getSkillContext() Context {
+	if a.skillList != nil {
+		return a.skillList.GetContext()
+	}
+	return Context{Type: ContextAll}
+}
+
+func (a *AppModel) currentSessionTargetContext() Context {
+	switch a.currentScreen {
+	case ScreenProjects:
+		if a.projectList != nil && len(a.projectList.projects) > 0 && a.projectList.cursor < len(a.projectList.projects) {
+			return Context{Type: ContextProject, Value: a.projectList.projects[a.projectList.cursor].Name}
+		}
+	case ScreenSessions:
+		return a.getSessionContext()
+	case ScreenSkills:
+		return a.getSkillContext()
+	}
+	return Context{Type: ContextAll}
+}
+
+func (a *AppModel) currentSkillTargetContext() Context {
+	switch a.currentScreen {
+	case ScreenProjects:
+		return Context{Type: ContextAll}
+	case ScreenSessions:
+		return a.getSessionContext()
+	case ScreenSkills:
+		return a.getSkillContext()
+	}
+	return Context{Type: ContextAll}
+}
+
 // renderHeader renders the header (context-aware)
 func (a *AppModel) renderHeader() string {
 	if a.currentScreen == ScreenProjects {
@@ -417,6 +536,21 @@ func (a *AppModel) renderHeader() string {
 		statsLabel := fmt.Sprintf("%d sessions / %d active", totalSessions, activeCount)
 		if a.inputMode == InputSearch {
 			filtered, total := a.projectList.GetFilterStats()
+			return renderHeaderWithFilter(a.width, contextLabel, statsLabel, filtered, total)
+		}
+		return renderHeader(a.width, contextLabel, statsLabel)
+	}
+
+	if a.currentScreen == ScreenSkills && a.skillList != nil {
+		total, ready, invalid := a.skillList.GetStats()
+		ctx := a.skillList.GetContext()
+		contextLabel := "All Skills"
+		if ctx.Type == ContextProject {
+			contextLabel = ctx.Value
+		}
+		statsLabel := formatSkillSummary(a.width, total, ready, invalid)
+		if a.inputMode == InputSearch {
+			filtered, total := a.skillList.GetFilterStats()
 			return renderHeaderWithFilter(a.width, contextLabel, statsLabel, filtered, total)
 		}
 		return renderHeader(a.width, contextLabel, statsLabel)
@@ -457,6 +591,12 @@ func (a *AppModel) renderBody(width, height int) string {
 		} else {
 			background = renderCenteredText("Session list not initialized", width, height)
 		}
+	case ScreenSkills:
+		if a.skillList != nil {
+			background = a.skillList.View(width, height)
+		} else {
+			background = renderCenteredText("Skill list not initialized", width, height)
+		}
 	default:
 		background = renderCenteredText("Unknown screen", width, height)
 	}
@@ -474,6 +614,14 @@ func (a *AppModel) renderBody(width, height int) string {
 		}
 		// Get panel content with ViewBox, then overlay on background
 		return overlayDialog(background, a.detailView.ViewBox(width), width, height)
+	}
+
+	if a.showingSkillDetail && a.skillDetailView != nil {
+		cmd := a.skillDetailView.Update(tea.WindowSizeMsg{Width: width, Height: height})
+		if cmd != nil {
+			// If CloseSkillDetailMsg is returned, handle in Update
+		}
+		return overlayDialog(background, a.skillDetailView.ViewBox(width), width, height)
 	}
 
 	// Log view (fullscreen, does not preserve background)
@@ -565,7 +713,7 @@ func (a *AppModel) resolveFooterContext() FooterContext {
 		return ctx
 	}
 
-	if a.showingDetail {
+	if a.showingDetail || a.showingSkillDetail {
 		ctx.Overlay = OverlayDetail
 		return ctx
 	}
@@ -696,7 +844,7 @@ func (a *AppModel) handleTabCompletion() {
 	if len(segments) == 1 {
 		// First segment: command name completion
 		prefix = segments[0]
-		commands := []string{"sessions", "projects", "context"}
+		commands := []string{"sessions", "projects", "skills", "context"}
 		for _, cmd := range commands {
 			if strings.HasPrefix(cmd, prefix) {
 				candidates = append(candidates, cmd)
@@ -753,7 +901,7 @@ func (a *AppModel) getCompletionSuggestion() string {
 
 	if len(segments) == 1 {
 		prefix = segments[0]
-		commands := []string{"sessions", "projects", "context"}
+		commands := []string{"sessions", "projects", "skills", "context"}
 		for _, cmd := range commands {
 			if strings.HasPrefix(cmd, prefix) && cmd != prefix {
 				candidates = append(candidates, cmd)
@@ -822,11 +970,15 @@ func (a *AppModel) executeCommand(cmdStr string) tea.Cmd {
 		return func() tea.Msg { return SwitchResourceMsg{Resource: ResourceSessions} }
 	case "projects":
 		return func() tea.Msg { return SwitchResourceMsg{Resource: ResourceProjects} }
+	case "skills":
+		return func() tea.Msg { return SwitchResourceMsg{Resource: ResourceSkills} }
 	case "context":
 		// :context all | :context <project-name>
 		if len(parts) < 2 {
-			// No argument: show current context
 			ctx := a.getSessionContext()
+			if a.currentScreen == ScreenSkills {
+				ctx = a.getSkillContext()
+			}
 			if ctx.Type == ContextAll {
 				a.SetFlash("Current context: all", false, 2*time.Second)
 			} else {
@@ -858,7 +1010,35 @@ func (a *AppModel) applySearchToCurrentView(query string) {
 		if a.sessionList != nil {
 			a.sessionList.ApplyFilter(query)
 		}
+	case ScreenSkills:
+		if a.skillList != nil {
+			a.skillList.ApplyFilter(query)
+		}
 	}
+}
+
+func (a *AppModel) clearActiveSearch() bool {
+	switch a.currentScreen {
+	case ScreenProjects:
+		if a.projectList != nil && a.projectList.HasActiveFilter() {
+			a.searchInput.SetValue("")
+			a.projectList.ApplyFilter("")
+			return true
+		}
+	case ScreenSessions:
+		if a.sessionList != nil && a.sessionList.HasActiveFilter() {
+			a.searchInput.SetValue("")
+			a.sessionList.ApplyFilter("")
+			return true
+		}
+	case ScreenSkills:
+		if a.skillList != nil && a.skillList.HasActiveFilter() {
+			a.searchInput.SetValue("")
+			a.skillList.ApplyFilter("")
+			return true
+		}
+	}
+	return false
 }
 
 func summarizeGlobalSessions(global []claudefs.GlobalSession) claudefs.LifecycleSummary {
@@ -874,4 +1054,11 @@ func formatLifecycleSummary(width int, summary claudefs.LifecycleSummary) string
 		return fmt.Sprintf("%d sessions / A:%d I:%d C:%d S:%d", summary.Total, summary.Active, summary.Idle, summary.Completed, summary.Stale)
 	}
 	return fmt.Sprintf("%d sessions / %d active / %d idle / %d completed / %d stale", summary.Total, summary.Active, summary.Idle, summary.Completed, summary.Stale)
+}
+
+func formatSkillSummary(width, total, ready, invalid int) string {
+	if width < 120 {
+		return fmt.Sprintf("%d skills / R:%d I:%d", total, ready, invalid)
+	}
+	return fmt.Sprintf("%d skills / %d ready / %d invalid", total, ready, invalid)
 }

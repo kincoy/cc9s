@@ -378,6 +378,10 @@ func (m *SessionListModel) GetFilterStats() (filtered, total int) {
 	return len(m.sessions), len(m.contextSessions)
 }
 
+func (m *SessionListModel) HasActiveFilter() bool {
+	return strings.TrimSpace(normalizeSearchQuery(m.filterQuery)) != ""
+}
+
 // ToggleSelect toggles row selection
 func (m *SessionListModel) ToggleSelect(idx int) {
 	if m.selectedRows == nil {

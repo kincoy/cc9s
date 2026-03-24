@@ -1,7 +1,7 @@
 <h1 align="center">cc9s</h1>
 
 <p align="center">
-  <strong>类似 k9s 风格的 Claude Code 会话管理终端工具</strong>
+  <strong>类似 k9s 风格的 Claude Code 会话与技能资源管理终端工具</strong>
 </p>
 
 <p align="center">
@@ -20,7 +20,7 @@
 
 Claude Code 将会话数据以 JSONL 文件存储在 `~/.claude/` 下。当你在几十个项目中积累了数百个会话后，查找和管理它们变得非常困难。
 
-cc9s 提供了一个全屏终端 UI（灵感来自 [k9s](https://github.com/derailed/k9s)），让你无需离开键盘即可浏览、搜索、查看和恢复会话。
+cc9s 提供了一个全屏终端 UI（灵感来自 [k9s](https://github.com/derailed/k9s)），让你无需离开键盘即可浏览、搜索、查看和恢复会话，并检查本地 Claude Code skills。
 
 ## 演示
 
@@ -40,6 +40,7 @@ cc9s 提供了一个全屏终端 UI（灵感来自 [k9s](https://github.com/dera
 - **搜索与过滤** — `/` 搜索，`:context <name>` 按项目过滤
 - **多选批量删除** — `Space` 选中，`Ctrl+D` 批量删除
 - **会话详情** — 查看会话统计、摘要和工具调用日志
+- **Skill 资源页** — 查看来自项目级、用户级和 plugin 的可用 skills / commands
 - **Tab 补全** — 自动补全命令和项目名
 - **完全键盘驱动** — 无需鼠标
 
@@ -104,6 +105,23 @@ brew tap kincoy/tap
 brew install cc9s
 ```
 
+**使用 `curl` 下载最新 Release：**
+
+```bash
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH="$(uname -m)"
+
+case "$ARCH" in
+  x86_64) ARCH="amd64" ;;
+  arm64|aarch64) ARCH="arm64" ;;
+  *) echo "unsupported arch: $ARCH" >&2; exit 1 ;;
+esac
+
+curl -fsSL "https://github.com/kincoy/cc9s/releases/latest/download/cc9s-${OS}-${ARCH}" -o cc9s
+chmod +x cc9s
+sudo mv cc9s /usr/local/bin/cc9s
+```
+
 **Go install：**
 
 ```bash
@@ -124,7 +142,7 @@ go build -o cc9s .
 cc9s
 ```
 
-首次启动时，cc9s 会扫描 `~/.claude/projects/` 目录。如果会话很多，首次加载可能需要几秒。
+首次启动时，cc9s 会扫描 `~/.claude/projects/`，然后发现项目级、用户级和已安装 plugin 中可用的 skill 资源，包括 `skills` 和 `commands`。如果本地资源很多，首次加载可能需要几秒。
 
 ## 快捷键
 
@@ -144,9 +162,10 @@ cc9s
 
 | 按键 | 操作 |
 |------|------|
-| `/` | 搜索会话 |
+| `/` | 搜索当前资源 |
 | `s` | 切换排序方式 |
-| `d` | 查看会话详情 |
+| `d` | 查看会话或 skill 详情 |
+| `e` | 编辑选中的 skill 或 command |
 | `Space` | 选中/取消选中会话 |
 | `Ctrl+D` | 删除选中会话 |
 | `l` | 查看会话日志 |
@@ -159,6 +178,9 @@ cc9s
 
 | 命令 | 说明 |
 |------|------|
+| `:skills` | 显示可用的 skills 和 commands |
+| `:sessions` | 显示跨项目会话 |
+| `:projects` | 显示项目列表 |
 | `:context all` | 显示所有项目的会话 |
 | `:context <名称>` | 按项目名过滤会话 |
 | `:q` | 退出 |
@@ -173,10 +195,13 @@ cc9s
 │   │   └── sessions/        # 活跃会话标记
 │   │       └── <pid>.json
 │   └── ...
+├── skills/                   # 用户级本地 skills
+├── commands/                 # 用户级本地 commands
+├── plugins/                  # 已安装 plugin 的缓存和元数据
 └── sessions/                 # 全局活跃会话索引
 ```
 
-cc9s 读取 `~/.claude/projects/` 下的 JSONL 文件并在 TUI 中展示。它 **不会** 修改任何 Claude Code 数据 — 删除操作需要明确确认。
+cc9s 读取 `~/.claude/projects/` 下的 JSONL 文件，然后从项目 `.claude/skills` / `.claude/commands`、用户 `~/.claude/skills` / `~/.claude/commands` 以及已安装 plugin 中发现可用资源，并在 TUI 中统一展示。它 **不会** 修改 Claude Code 的会话数据，删除操作仍然需要明确确认。
 
 ## 贡献
 
