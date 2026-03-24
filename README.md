@@ -1,7 +1,7 @@
 <h1 align="center">cc9s</h1>
 
 <p align="center">
-  <strong>A k9s-inspired TUI for managing Claude Code sessions and skills</strong>
+  <strong>A k9s-inspired TUI for managing Claude Code sessions, skills, and agents</strong>
 </p>
 
 <p align="center">
@@ -20,7 +20,7 @@
 
 Claude Code stores session data as JSONL files under `~/.claude/`. When you accumulate hundreds of sessions across dozens of projects, finding and managing them becomes painful.
 
-cc9s solves this by providing a full-screen terminal UI — inspired by [k9s](https://github.com/derailed/k9s) — that lets you browse, search, inspect, and resume sessions, and inspect local Claude Code skills, without leaving your keyboard.
+cc9s solves this by providing a full-screen terminal UI — inspired by [k9s](https://github.com/derailed/k9s) — that lets you browse, search, inspect, and resume sessions, and inspect local Claude Code skills and agents, without leaving your keyboard.
 
 ## Demo
 
@@ -41,6 +41,7 @@ One common flow:
 - **Batch delete** — `Space` to select, `Ctrl+D` to delete multiple sessions
 - **Session details** — View session stats, summary, and tool call logs
 - **Skill resource browser** — View available Claude Code skills and commands from project, user, and plugin scopes
+- **Agent resource browser** — View file-backed Claude Code agents from project, user, and plugin scopes with Ready / Invalid states
 - **Tab completion** — Auto-complete commands and project names
 - **Fully keyboard-driven** — No mouse required
 
@@ -142,7 +143,7 @@ go build -o cc9s .
 cc9s
 ```
 
-On first launch, cc9s scans `~/.claude/projects/` for projects and sessions, then discovers available skill resources from project roots, user roots, and installed plugins, including both `skills` and `commands`. This may take a moment if you have many local resources.
+On first launch, cc9s scans `~/.claude/projects/` for projects and sessions, then discovers available resource pages from project roots, user roots, and installed plugins. Today that includes `skills`, `commands`, and file-backed `agents`. This may take a moment if you have many local resources.
 
 ## Key Bindings
 
@@ -163,9 +164,10 @@ On first launch, cc9s scans `~/.claude/projects/` for projects and sessions, the
 | Key | Action |
 |-----|--------|
 | `/` | Search current resource |
-| `s` | Toggle sort order |
-| `d` | View session or skill details |
-| `e` | Edit selected skill or command |
+| `s` | Cycle sort field |
+| `S` | Reverse sort order |
+| `d` | View session, skill, or agent details |
+| `e` | Edit selected skill, command, or agent file |
 | `Space` | Toggle select session |
 | `Ctrl+D` | Delete selected session(s) |
 | `l` | View session log |
@@ -179,10 +181,11 @@ Type `:` to enter command mode. Press `Tab` to autocomplete.
 | Command | Description |
 |---------|-------------|
 | `:skills` | Show available skills and commands |
+| `:agents` | Show available file-backed agents |
 | `:sessions` | Show sessions across projects |
 | `:projects` | Show projects |
-| `:context all` | Show sessions from all projects |
-| `:context <name>` | Filter sessions by project name |
+| `:context all` | Switch current resource to all-project context |
+| `:context <name>` | Filter current resource by project context |
 | `:q` | Quit |
 
 ## How It Works
@@ -197,11 +200,12 @@ Type `:` to enter command mode. Press `Tab` to autocomplete.
 │   └── ...
 ├── skills/                   # User-level local skills
 ├── commands/                 # User-level local commands
+├── agents/                   # User-level local agents
 ├── plugins/                  # Installed plugin cache and metadata
 └── sessions/                 # Global active session index
 ```
 
-cc9s reads JSONL files from `~/.claude/projects/`, then discovers available skill resources from project `.claude/skills` and `.claude/commands`, user `~/.claude/skills` and `~/.claude/commands`, plus installed plugin resources. It does **not** modify Claude Code session data — deletion operations still require explicit confirmation.
+cc9s reads JSONL files from `~/.claude/projects/`, then discovers available resource pages from project `.claude/skills`, `.claude/commands`, and `.claude/agents`, user `~/.claude/skills`, `~/.claude/commands`, and `~/.claude/agents`, plus installed plugin resources. Agent availability is reconciled against `claude agents`, and built-in agents are intentionally excluded from the v1 agent resource. cc9s does **not** modify Claude Code session data — deletion operations still require explicit confirmation.
 
 ## Contributing
 

@@ -75,6 +75,24 @@ func SkillStatusText(status claudefs.SkillStatus) string {
 	}
 }
 
+func AgentStatusStyle(status claudefs.AgentStatus) lipgloss.Style {
+	switch status {
+	case claudefs.AgentStatusInvalid:
+		return InvalidAgentStatusStyle
+	default:
+		return ReadyAgentStatusStyle
+	}
+}
+
+func AgentStatusText(status claudefs.AgentStatus) string {
+	switch status {
+	case claudefs.AgentStatusInvalid:
+		return "! Invalid"
+	default:
+		return "✓ Ready"
+	}
+}
+
 func SkillScopeStyle(scope claudefs.SkillScope) lipgloss.Style {
 	switch scope {
 	case claudefs.SkillScopeProject:
@@ -112,5 +130,27 @@ func SkillKindStyle(kind claudefs.SkillKind) lipgloss.Style {
 		return CommandKindBadgeStyle
 	default:
 		return SkillKindBadgeStyle
+	}
+}
+
+func AgentScopeStyle(scope claudefs.AgentScope) lipgloss.Style {
+	switch scope {
+	case claudefs.AgentScopeProject:
+		return ProjectAgentSourceStyle
+	case claudefs.AgentScopePlugin:
+		return PluginAgentSourceStyle
+	default:
+		return UserAgentSourceStyle
+	}
+}
+
+func AgentScopeText(scope claudefs.AgentScope) string {
+	switch scope {
+	case claudefs.AgentScopeProject:
+		return "Project"
+	case claudefs.AgentScopePlugin:
+		return "Plugin"
+	default:
+		return "Global"
 	}
 }

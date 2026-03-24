@@ -72,6 +72,25 @@ type SkillEditorFinishedMsg struct {
 	Err   error
 }
 
+// ShowAgentDetailMsg shows agent detail panel.
+type ShowAgentDetailMsg struct {
+	Agent claudefs.AgentResource
+}
+
+// CloseAgentDetailMsg closes the agent detail panel.
+type CloseAgentDetailMsg struct{}
+
+// EditAgentMsg opens the selected agent in an external editor.
+type EditAgentMsg struct {
+	Agent claudefs.AgentResource
+}
+
+// AgentEditorFinishedMsg is emitted after the agent editor exits.
+type AgentEditorFinishedMsg struct {
+	Agent claudefs.AgentResource
+	Err   error
+}
+
 // statsLoadedMsg session stats loaded
 type statsLoadedMsg struct {
 	stats *claudefs.SessionStats

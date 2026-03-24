@@ -1,7 +1,7 @@
 <h1 align="center">cc9s</h1>
 
 <p align="center">
-  <strong>类似 k9s 风格的 Claude Code 会话与技能资源管理终端工具</strong>
+  <strong>类似 k9s 风格的 Claude Code 会话、技能与 agent 资源管理终端工具</strong>
 </p>
 
 <p align="center">
@@ -20,7 +20,7 @@
 
 Claude Code 将会话数据以 JSONL 文件存储在 `~/.claude/` 下。当你在几十个项目中积累了数百个会话后，查找和管理它们变得非常困难。
 
-cc9s 提供了一个全屏终端 UI（灵感来自 [k9s](https://github.com/derailed/k9s)），让你无需离开键盘即可浏览、搜索、查看和恢复会话，并检查本地 Claude Code skills。
+cc9s 提供了一个全屏终端 UI（灵感来自 [k9s](https://github.com/derailed/k9s)），让你无需离开键盘即可浏览、搜索、查看和恢复会话，并检查本地 Claude Code skills 和 agents。
 
 ## 演示
 
@@ -41,6 +41,7 @@ cc9s 提供了一个全屏终端 UI（灵感来自 [k9s](https://github.com/dera
 - **多选批量删除** — `Space` 选中，`Ctrl+D` 批量删除
 - **会话详情** — 查看会话统计、摘要和工具调用日志
 - **Skill 资源页** — 查看来自项目级、用户级和 plugin 的可用 skills / commands
+- **Agent 资源页** — 查看来自项目级、用户级和 plugin 的 file-backed agents，并区分 Ready / Invalid 状态
 - **Tab 补全** — 自动补全命令和项目名
 - **完全键盘驱动** — 无需鼠标
 
@@ -142,7 +143,7 @@ go build -o cc9s .
 cc9s
 ```
 
-首次启动时，cc9s 会扫描 `~/.claude/projects/`，然后发现项目级、用户级和已安装 plugin 中可用的 skill 资源，包括 `skills` 和 `commands`。如果本地资源很多，首次加载可能需要几秒。
+首次启动时，cc9s 会扫描 `~/.claude/projects/`，然后发现项目级、用户级和已安装 plugin 中可用的资源页。目前包括 `skills`、`commands` 和 file-backed `agents`。如果本地资源很多，首次加载可能需要几秒。
 
 ## 快捷键
 
@@ -163,9 +164,10 @@ cc9s
 | 按键 | 操作 |
 |------|------|
 | `/` | 搜索当前资源 |
-| `s` | 切换排序方式 |
-| `d` | 查看会话或 skill 详情 |
-| `e` | 编辑选中的 skill 或 command |
+| `s` | 循环切换排序字段 |
+| `S` | 反转排序方向 |
+| `d` | 查看会话、skill 或 agent 详情 |
+| `e` | 编辑选中的 skill、command 或 agent 文件 |
 | `Space` | 选中/取消选中会话 |
 | `Ctrl+D` | 删除选中会话 |
 | `l` | 查看会话日志 |
@@ -179,10 +181,11 @@ cc9s
 | 命令 | 说明 |
 |------|------|
 | `:skills` | 显示可用的 skills 和 commands |
+| `:agents` | 显示可用的 file-backed agents |
 | `:sessions` | 显示跨项目会话 |
 | `:projects` | 显示项目列表 |
-| `:context all` | 显示所有项目的会话 |
-| `:context <名称>` | 按项目名过滤会话 |
+| `:context all` | 将当前资源切换到全部项目上下文 |
+| `:context <名称>` | 按项目上下文过滤当前资源 |
 | `:q` | 退出 |
 
 ## 工作原理
@@ -197,11 +200,12 @@ cc9s
 │   └── ...
 ├── skills/                   # 用户级本地 skills
 ├── commands/                 # 用户级本地 commands
+├── agents/                   # 用户级本地 agents
 ├── plugins/                  # 已安装 plugin 的缓存和元数据
 └── sessions/                 # 全局活跃会话索引
 ```
 
-cc9s 读取 `~/.claude/projects/` 下的 JSONL 文件，然后从项目 `.claude/skills` / `.claude/commands`、用户 `~/.claude/skills` / `~/.claude/commands` 以及已安装 plugin 中发现可用资源，并在 TUI 中统一展示。它 **不会** 修改 Claude Code 的会话数据，删除操作仍然需要明确确认。
+cc9s 读取 `~/.claude/projects/` 下的 JSONL 文件，然后从项目 `.claude/skills` / `.claude/commands` / `.claude/agents`、用户 `~/.claude/skills` / `~/.claude/commands` / `~/.claude/agents` 以及已安装 plugin 中发现可用资源，并在 TUI 中统一展示。agent 资源的可用性会和 `claude agents` 识别结果对齐，v1 不纳入 built-in agents。它 **不会** 修改 Claude Code 的会话数据，删除操作仍然需要明确确认。
 
 ## 贡献
 
