@@ -56,3 +56,61 @@ func LifecycleStatusText(state claudefs.SessionLifecycleState) string {
 		return "○ Completed"
 	}
 }
+
+func SkillStatusStyle(status claudefs.SkillStatus) lipgloss.Style {
+	switch status {
+	case claudefs.SkillStatusInvalid:
+		return InvalidSkillStatusStyle
+	default:
+		return ReadySkillStatusStyle
+	}
+}
+
+func SkillStatusText(status claudefs.SkillStatus) string {
+	switch status {
+	case claudefs.SkillStatusInvalid:
+		return "! Invalid"
+	default:
+		return "✓ Ready"
+	}
+}
+
+func SkillScopeStyle(scope claudefs.SkillScope) lipgloss.Style {
+	switch scope {
+	case claudefs.SkillScopeProject:
+		return ProjectSkillSourceStyle
+	case claudefs.SkillScopePlugin:
+		return PluginSkillSourceStyle
+	default:
+		return UserSkillSourceStyle
+	}
+}
+
+func SkillScopeText(scope claudefs.SkillScope) string {
+	switch scope {
+	case claudefs.SkillScopeProject:
+		return "Project"
+	case claudefs.SkillScopePlugin:
+		return "Plugin"
+	default:
+		return "Global"
+	}
+}
+
+func SkillKindText(kind claudefs.SkillKind) string {
+	switch kind {
+	case claudefs.SkillKindCommand:
+		return "CMD"
+	default:
+		return "SKILL"
+	}
+}
+
+func SkillKindStyle(kind claudefs.SkillKind) lipgloss.Style {
+	switch kind {
+	case claudefs.SkillKindCommand:
+		return CommandKindBadgeStyle
+	default:
+		return SkillKindBadgeStyle
+	}
+}

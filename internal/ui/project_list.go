@@ -23,13 +23,13 @@ const (
 type ProjectListModel struct {
 	projects      []claudefs.Project // currently displayed project list (after filtering)
 	allProjects   []claudefs.Project // complete project list (filter source)
-	filterQuery   string         // current search query
-	cursor        int            // currently selected row index
-	loading       bool           // whether data is loading
-	sortBy        SortField      // current sort field
-	sortAsc       bool           // sort direction
-	totalSessions int            // total session count
-	activeCount   int            // active session count
+	filterQuery   string             // current search query
+	cursor        int                // currently selected row index
+	loading       bool               // whether data is loading
+	sortBy        SortField          // current sort field
+	sortAsc       bool               // sort direction
+	totalSessions int                // total session count
+	activeCount   int                // active session count
 }
 
 // NewProjectListModel creates a new project list Model
@@ -149,13 +149,13 @@ func renderLoadingState(width, height int) string {
 // ApplyFilter filters the project list by query
 func (m *ProjectListModel) ApplyFilter(query string) {
 	m.filterQuery = query
-	if query == "" {
+	q := normalizeResourceSearchQuery(query)
+	if q == "" {
 		m.projects = m.allProjects
 		m.clampCursor()
 		return
 	}
 
-	q := strings.ToLower(query)
 	var filtered []claudefs.Project
 	for _, p := range m.allProjects {
 		if strings.Contains(strings.ToLower(p.Name), q) ||
@@ -181,4 +181,8 @@ func (m *ProjectListModel) clampCursor() {
 // GetFilterStats returns filter stats (filtered/total)
 func (m *ProjectListModel) GetFilterStats() (filtered, total int) {
 	return len(m.projects), len(m.allProjects)
+}
+
+func (m *ProjectListModel) HasActiveFilter() bool {
+	return strings.TrimSpace(normalizeResourceSearchQuery(m.filterQuery)) != ""
 }

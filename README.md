@@ -1,13 +1,13 @@
 <h1 align="center">cc9s</h1>
 
 <p align="center">
-  <strong>A k9s-inspired TUI for managing Claude Code sessions</strong>
+  <strong>A k9s-inspired TUI for managing Claude Code sessions and skills</strong>
 </p>
 
 <p align="center">
   <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go" alt="Go version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
-  <a href="https://github.com/kincoy/cc9s/releases"><img src="https://img.shields.io/badge/Release-v0.1.0-green.svg" alt="Release"></a>
+  <a href="https://github.com/kincoy/cc9s/releases"><img src="https://img.shields.io/badge/Release-v0.1.2-green.svg" alt="Release"></a>
 </p>
 
 <p align="center">
@@ -20,7 +20,7 @@
 
 Claude Code stores session data as JSONL files under `~/.claude/`. When you accumulate hundreds of sessions across dozens of projects, finding and managing them becomes painful.
 
-cc9s solves this by providing a full-screen terminal UI — inspired by [k9s](https://github.com/derailed/k9s) — that lets you browse, search, inspect, and resume sessions without leaving your keyboard.
+cc9s solves this by providing a full-screen terminal UI — inspired by [k9s](https://github.com/derailed/k9s) — that lets you browse, search, inspect, and resume sessions, and inspect local Claude Code skills, without leaving your keyboard.
 
 ## Demo
 
@@ -40,6 +40,7 @@ One common flow:
 - **Search & filter** — `/` to search, `:context <name>` to filter by project
 - **Batch delete** — `Space` to select, `Ctrl+D` to delete multiple sessions
 - **Session details** — View session stats, summary, and tool call logs
+- **Skill resource browser** — View available Claude Code skills and commands from project, user, and plugin scopes
 - **Tab completion** — Auto-complete commands and project names
 - **Fully keyboard-driven** — No mouse required
 
@@ -104,6 +105,23 @@ brew tap kincoy/tap
 brew install cc9s
 ```
 
+**Download latest release with `curl`:**
+
+```bash
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH="$(uname -m)"
+
+case "$ARCH" in
+  x86_64) ARCH="amd64" ;;
+  arm64|aarch64) ARCH="arm64" ;;
+  *) echo "unsupported arch: $ARCH" >&2; exit 1 ;;
+esac
+
+curl -fsSL "https://github.com/kincoy/cc9s/releases/latest/download/cc9s-${OS}-${ARCH}" -o cc9s
+chmod +x cc9s
+sudo mv cc9s /usr/local/bin/cc9s
+```
+
 **Go install:**
 
 ```bash
@@ -124,7 +142,7 @@ go build -o cc9s .
 cc9s
 ```
 
-On first launch, cc9s scans `~/.claude/projects/` for projects and sessions. This may take a moment if you have many sessions.
+On first launch, cc9s scans `~/.claude/projects/` for projects and sessions, then discovers available skill resources from project roots, user roots, and installed plugins, including both `skills` and `commands`. This may take a moment if you have many local resources.
 
 ## Key Bindings
 
@@ -144,9 +162,10 @@ On first launch, cc9s scans `~/.claude/projects/` for projects and sessions. Thi
 
 | Key | Action |
 |-----|--------|
-| `/` | Search sessions |
+| `/` | Search current resource |
 | `s` | Toggle sort order |
-| `d` | View session details |
+| `d` | View session or skill details |
+| `e` | Edit selected skill or command |
 | `Space` | Toggle select session |
 | `Ctrl+D` | Delete selected session(s) |
 | `l` | View session log |
@@ -159,6 +178,9 @@ Type `:` to enter command mode. Press `Tab` to autocomplete.
 
 | Command | Description |
 |---------|-------------|
+| `:skills` | Show available skills and commands |
+| `:sessions` | Show sessions across projects |
+| `:projects` | Show projects |
 | `:context all` | Show sessions from all projects |
 | `:context <name>` | Filter sessions by project name |
 | `:q` | Quit |
@@ -173,10 +195,13 @@ Type `:` to enter command mode. Press `Tab` to autocomplete.
 │   │   └── sessions/        # Active session markers
 │   │       └── <pid>.json
 │   └── ...
+├── skills/                   # User-level local skills
+├── commands/                 # User-level local commands
+├── plugins/                  # Installed plugin cache and metadata
 └── sessions/                 # Global active session index
 ```
 
-cc9s reads JSONL files from `~/.claude/projects/` and presents them in a structured TUI. It does **not** modify any Claude Code data — deletion operations require explicit confirmation.
+cc9s reads JSONL files from `~/.claude/projects/`, then discovers available skill resources from project `.claude/skills` and `.claude/commands`, user `~/.claude/skills` and `~/.claude/commands`, plus installed plugin resources. It does **not** modify Claude Code session data — deletion operations still require explicit confirmation.
 
 ## Contributing
 
