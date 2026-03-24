@@ -90,6 +90,18 @@ cc9s 提供了一个全屏终端 UI（灵感来自 [k9s](https://github.com/dera
   <img src="assets/command.jpg" alt="命令模式" width="720">
 </p>
 
+**Skills** — `:skills` 浏览可用的 skills 和 commands
+
+<p align="center">
+  <img src="assets/skills.jpg" alt="Skills" width="720">
+</p>
+
+**Agents** — `:agents` 浏览可用的 file-backed agents
+
+<p align="center">
+  <img src="assets/agents.jpg" alt="Agents" width="720">
+</p>
+
 ## 快速开始
 
 ### 环境要求

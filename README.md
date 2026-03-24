@@ -90,6 +90,18 @@ One common flow:
   <img src="assets/command.jpg" alt="Command mode" width="720">
 </p>
 
+**Skills** — `:skills` to browse available skills and commands
+
+<p align="center">
+  <img src="assets/skills.jpg" alt="Skills" width="720">
+</p>
+
+**Agents** — `:agents` to browse available file-backed agents
+
+<p align="center">
+  <img src="assets/agents.jpg" alt="Agents" width="720">
+</p>
+
 ## Quick Start
 
 ### Prerequisites
