@@ -71,14 +71,16 @@ type AppModel struct {
 	flashUntil   time.Time
 	flashIsError bool
 
-	showingDetail      bool
-	detailView         *DetailViewModel
-	showingSkillDetail bool
-	skillDetailView    *SkillDetailViewModel
-	showingAgentDetail bool
-	agentDetailView    *AgentDetailViewModel
-	showingLog         bool
-	logView            *LogViewModel
+	showingDetail        bool
+	detailView           *DetailViewModel
+	showingProjectDetail bool
+	projectDetailView    *ProjectDetailViewModel
+	showingSkillDetail   bool
+	skillDetailView      *SkillDetailViewModel
+	showingAgentDetail   bool
+	agentDetailView      *AgentDetailViewModel
+	showingLog           bool
+	logView              *LogViewModel
 }
 
 // NewAppModel creates a new application Model
@@ -128,6 +130,19 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if _, ok := resultMsg.(CloseDetailMsg); ok {
 				a.showingDetail = false
 				a.detailView = nil
+				return a, nil
+			}
+		}
+		return a, cmd
+	}
+
+	if a.showingProjectDetail && a.projectDetailView != nil {
+		cmd := a.projectDetailView.Update(msg)
+		if cmd != nil {
+			resultMsg := cmd()
+			if _, ok := resultMsg.(CloseProjectDetailMsg); ok {
+				a.showingProjectDetail = false
+				a.projectDetailView = nil
 				return a, nil
 			}
 		}
@@ -200,6 +215,16 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case CloseDetailMsg:
 		a.showingDetail = false
 		a.detailView = nil
+		return a, nil
+
+	case ShowProjectDetailMsg:
+		a.showingProjectDetail = true
+		a.projectDetailView = NewProjectDetailViewModel(msg.Project)
+		return a, a.projectDetailView.Init()
+
+	case CloseProjectDetailMsg:
+		a.showingProjectDetail = false
+		a.projectDetailView = nil
 		return a, nil
 
 	case ShowSkillDetailMsg:
@@ -741,6 +766,14 @@ func (a *AppModel) renderBody(width, height int) string {
 		return overlayDialog(background, a.detailView.ViewBox(width), width, height)
 	}
 
+	if a.showingProjectDetail && a.projectDetailView != nil {
+		cmd := a.projectDetailView.Update(tea.WindowSizeMsg{Width: width, Height: height})
+		if cmd != nil {
+			// If CloseProjectDetailMsg is returned, handle in Update
+		}
+		return overlayDialog(background, a.projectDetailView.ViewBox(width), width, height)
+	}
+
 	if a.showingSkillDetail && a.skillDetailView != nil {
 		cmd := a.skillDetailView.Update(tea.WindowSizeMsg{Width: width, Height: height})
 		if cmd != nil {
@@ -846,7 +879,7 @@ func (a *AppModel) resolveFooterContext() FooterContext {
 		return ctx
 	}
 
-	if a.showingDetail || a.showingSkillDetail || a.showingAgentDetail {
+	if a.showingDetail || a.showingProjectDetail || a.showingSkillDetail || a.showingAgentDetail {
 		ctx.Overlay = OverlayDetail
 		return ctx
 	}

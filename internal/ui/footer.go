@@ -109,6 +109,7 @@ func hintsForContext(ctx FooterContext) []KeyHint {
 			{Key: "j/k", Label: "Navigate"},
 			{Key: "s/S", Label: "Sort"},
 			{Key: "Enter", Label: "Open"},
+			{Key: "d", Label: "Detail"},
 			{Key: "/", Label: "Search"},
 			{Key: ":", Label: "Cmd"},
 			{Key: "?", Label: "Help"},

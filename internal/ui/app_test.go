@@ -201,6 +201,31 @@ func TestAgentLoadErrorBlocksSearchMode(t *testing.T) {
 	}
 }
 
+func TestShowProjectDetailMessageOpensProjectDetailOverlay(t *testing.T) {
+	app := NewAppModel()
+
+	model, cmd := app.Update(ShowProjectDetailMsg{
+		Project: claudefs.Project{Name: "cc9s", Path: "/tmp/cc9s"},
+	})
+	if cmd != nil {
+		t.Fatalf("expected no async command for project detail init, got %v", cmd)
+	}
+
+	appModel, ok := model.(*AppModel)
+	if !ok {
+		t.Fatalf("expected *AppModel, got %T", model)
+	}
+	if !appModel.showingProjectDetail {
+		t.Fatal("expected project detail overlay to be visible")
+	}
+	if appModel.projectDetailView == nil {
+		t.Fatal("expected project detail view to be initialized")
+	}
+	if appModel.projectDetailView.project.Name != "cc9s" {
+		t.Fatalf("project detail name = %q, want cc9s", appModel.projectDetailView.project.Name)
+	}
+}
+
 type assertError string
 
 func (e assertError) Error() string { return string(e) }

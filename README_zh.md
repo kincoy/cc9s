@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go" alt="Go version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
-  <a href="https://github.com/kincoy/cc9s/releases"><img src="https://img.shields.io/badge/Release-v0.1.2-green.svg" alt="Release"></a>
+  <a href="https://github.com/kincoy/cc9s/releases"><img src="https://img.shields.io/badge/Release-v0.1.3-green.svg" alt="Release"></a>
 </p>
 
 <p align="center">
@@ -36,6 +36,7 @@ cc9s 提供了一个全屏终端 UI（灵感来自 [k9s](https://github.com/dera
 ## 功能
 
 - **双层导航** — Projects → Sessions，`Enter` 进入，`Esc` 返回
+- **项目总览** — 在项目层看到本地 session、skill、command、agent 摘要，并通过 `d` 查看项目路径和本地 Claude roots
 - **会话恢复** — 直接从 TUI 启动对应的 Claude Code 会话
 - **搜索与过滤** — `/` 搜索，`:context <name>` 按项目过滤
 - **多选批量删除** — `Space` 选中，`Ctrl+D` 批量删除
@@ -166,7 +167,7 @@ cc9s
 | `/` | 搜索当前资源 |
 | `s` | 循环切换排序字段 |
 | `S` | 反转排序方向 |
-| `d` | 查看会话、skill 或 agent 详情 |
+| `d` | 查看项目、会话、skill 或 agent 详情 |
 | `e` | 编辑选中的 skill、command 或 agent 文件 |
 | `Space` | 选中/取消选中会话 |
 | `Ctrl+D` | 删除选中会话 |
