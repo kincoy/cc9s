@@ -64,7 +64,7 @@ func hintsForContext(ctx FooterContext) []KeyHint {
 		}
 
 	case OverlayDetail:
-		if ctx.Screen == ScreenSkills {
+		if ctx.Screen == ScreenSkills || ctx.Screen == ScreenAgents {
 			return []KeyHint{
 				{Key: "e", Label: "Edit"},
 				{Key: "Esc", Label: "Close detail"},
@@ -139,6 +139,19 @@ func hintsForContext(ctx FooterContext) []KeyHint {
 		return hints
 
 	case ScreenSkills:
+		return []KeyHint{
+			{Key: "q", Label: "Quit"},
+			{Key: "j/k", Label: "Navigate"},
+			{Key: "s/S", Label: "Sort"},
+			{Key: "d", Label: "Detail"},
+			{Key: "e", Label: "Edit"},
+			{Key: "/", Label: "Search"},
+			{Key: ":", Label: "Cmd"},
+			{Key: "0", Label: "All ctx"},
+			{Key: "?", Label: "Help"},
+		}
+
+	case ScreenAgents:
 		return []KeyHint{
 			{Key: "q", Label: "Quit"},
 			{Key: "j/k", Label: "Navigate"},

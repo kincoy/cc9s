@@ -20,6 +20,7 @@ const (
 	ScreenProjects Screen = iota // project list
 	ScreenSessions               // session list (unified, supports context filtering)
 	ScreenSkills                 // skills list
+	ScreenAgents                 // agents list
 )
 
 // ResourceType resource type
@@ -29,6 +30,7 @@ const (
 	ResourceProjects ResourceType = iota // projects resource
 	ResourceSessions                     // sessions resource
 	ResourceSkills                       // skills resource
+	ResourceAgents                       // agents resource
 )
 
 // InputMode input mode
@@ -54,6 +56,7 @@ type AppModel struct {
 	projectList       *ProjectListModel
 	sessionList       *SessionListModel
 	skillList         *SkillListModel
+	agentList         *AgentListModel
 	lastProjectCursor int // saves the cursor position of the project list
 
 	searchInput  textinput.Model
@@ -72,6 +75,8 @@ type AppModel struct {
 	detailView         *DetailViewModel
 	showingSkillDetail bool
 	skillDetailView    *SkillDetailViewModel
+	showingAgentDetail bool
+	agentDetailView    *AgentDetailViewModel
 	showingLog         bool
 	logView            *LogViewModel
 }
@@ -146,6 +151,22 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, cmd
 	}
 
+	if a.showingAgentDetail && a.agentDetailView != nil {
+		if keyMsg, ok := msg.(tea.KeyPressMsg); ok && (keyMsg.String() == "e" || keyMsg.String() == "E") {
+			return a, editAgentCmd(a.agentDetailView.agent)
+		}
+		cmd := a.agentDetailView.Update(msg)
+		if cmd != nil {
+			resultMsg := cmd()
+			if _, ok := resultMsg.(CloseAgentDetailMsg); ok {
+				a.showingAgentDetail = false
+				a.agentDetailView = nil
+				return a, nil
+			}
+		}
+		return a, cmd
+	}
+
 	// Log view handles message
 	if a.showingLog && a.logView != nil {
 		cmd := a.logView.Update(msg)
@@ -205,6 +226,30 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 
+	case ShowAgentDetailMsg:
+		a.showingAgentDetail = true
+		a.agentDetailView = NewAgentDetailViewModel(msg.Agent)
+		return a, a.agentDetailView.Init()
+
+	case CloseAgentDetailMsg:
+		a.showingAgentDetail = false
+		a.agentDetailView = nil
+		return a, nil
+
+	case EditAgentMsg:
+		return a, editAgentCmd(msg.Agent)
+
+	case AgentEditorFinishedMsg:
+		if msg.Err != nil && !isSignalError(msg.Err) {
+			a.SetFlash(fmt.Sprintf("Editor exited with error: %v", msg.Err), true, 5*time.Second)
+		} else if msg.Err == nil {
+			a.SetFlash(fmt.Sprintf("Edited agent: %s", msg.Agent.Name), false, 2*time.Second)
+		}
+		if a.agentList != nil {
+			return a, a.agentList.Reload()
+		}
+		return a, nil
+
 	case ShowLogMsg:
 		a.showingLog = true
 		a.logView = NewLogViewModel(msg.Session)
@@ -250,6 +295,21 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if cmd != nil {
 				return a, cmd
 			}
+		case ResourceAgents:
+			targetCtx := a.currentAgentTargetContext()
+			a.currentScreen = ScreenAgents
+			if a.agentList == nil {
+				a.agentList = NewAgentListModel()
+				cmd := a.agentList.Init()
+				if ctxCmd := a.agentList.SetContext(targetCtx); ctxCmd != nil {
+					return a, tea.Batch(cmd, ctxCmd)
+				}
+				return a, cmd
+			}
+			cmd := a.agentList.SetContext(targetCtx)
+			if cmd != nil {
+				return a, cmd
+			}
 		}
 
 	case SwitchContextMsg:
@@ -260,6 +320,10 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.currentScreen == ScreenSkills && a.skillList != nil {
 			a.currentScreen = ScreenSkills
 			return a, a.skillList.SetContext(msg.Context)
+		}
+		if a.currentScreen == ScreenAgents && a.agentList != nil {
+			a.currentScreen = ScreenAgents
+			return a, a.agentList.SetContext(msg.Context)
 		}
 
 	case DeleteSessionsMsg:
@@ -333,6 +397,9 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 		case "/":
+			if a.currentScreen == ScreenAgents && a.agentList != nil && a.agentList.HasLoadError() {
+				return a, nil
+			}
 			a.inputMode = InputSearch
 			a.searchInput.SetValue("")
 			a.searchInput.Focus()
@@ -343,7 +410,7 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.commandInput.Focus()
 			return a, nil
 		case "0":
-			if a.currentScreen == ScreenSessions || a.currentScreen == ScreenSkills {
+			if a.currentScreen == ScreenSessions || a.currentScreen == ScreenSkills || a.currentScreen == ScreenAgents {
 				// Shortcut to switch to context=all
 				return a, func() tea.Msg {
 					return SwitchContextMsg{Context: Context{Type: ContextAll}}
@@ -396,11 +463,20 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.skillList != nil {
 			cmd = a.skillList.Update(msg)
 		}
+	case ScreenAgents:
+		if a.agentList != nil {
+			cmd = a.agentList.Update(msg)
+		}
 	}
 
 	if _, ok := msg.(skillsLoadedMsg); ok && a.showingSkillDetail && a.skillDetailView != nil && a.skillList != nil {
 		if skill, found := a.skillList.GetSelectedSkill(); found {
 			a.skillDetailView.skill = skill
+		}
+	}
+	if _, ok := msg.(agentsLoadedMsg); ok && a.showingAgentDetail && a.agentDetailView != nil && a.agentList != nil {
+		if agent, found := a.agentList.GetSelectedAgent(); found {
+			a.agentDetailView.agent = agent
 		}
 	}
 
@@ -502,6 +578,13 @@ func (a *AppModel) getSkillContext() Context {
 	return Context{Type: ContextAll}
 }
 
+func (a *AppModel) getAgentContext() Context {
+	if a.agentList != nil {
+		return a.agentList.GetContext()
+	}
+	return Context{Type: ContextAll}
+}
+
 func (a *AppModel) currentSessionTargetContext() Context {
 	switch a.currentScreen {
 	case ScreenProjects:
@@ -512,6 +595,8 @@ func (a *AppModel) currentSessionTargetContext() Context {
 		return a.getSessionContext()
 	case ScreenSkills:
 		return a.getSkillContext()
+	case ScreenAgents:
+		return a.getAgentContext()
 	}
 	return Context{Type: ContextAll}
 }
@@ -524,6 +609,22 @@ func (a *AppModel) currentSkillTargetContext() Context {
 		return a.getSessionContext()
 	case ScreenSkills:
 		return a.getSkillContext()
+	case ScreenAgents:
+		return a.getAgentContext()
+	}
+	return Context{Type: ContextAll}
+}
+
+func (a *AppModel) currentAgentTargetContext() Context {
+	switch a.currentScreen {
+	case ScreenProjects:
+		return Context{Type: ContextAll}
+	case ScreenSessions:
+		return a.getSessionContext()
+	case ScreenSkills:
+		return a.getSkillContext()
+	case ScreenAgents:
+		return a.getAgentContext()
 	}
 	return Context{Type: ContextAll}
 }
@@ -551,6 +652,24 @@ func (a *AppModel) renderHeader() string {
 		statsLabel := formatSkillSummary(a.width, total, ready, invalid)
 		if a.inputMode == InputSearch {
 			filtered, total := a.skillList.GetFilterStats()
+			return renderHeaderWithFilter(a.width, contextLabel, statsLabel, filtered, total)
+		}
+		return renderHeader(a.width, contextLabel, statsLabel)
+	}
+
+	if a.currentScreen == ScreenAgents && a.agentList != nil {
+		total, ready, invalid := a.agentList.GetStats()
+		ctx := a.agentList.GetContext()
+		contextLabel := "All Agents"
+		if ctx.Type == ContextProject {
+			contextLabel = ctx.Value
+		}
+		statsLabel := formatAgentSummary(a.width, total, ready, invalid)
+		if a.agentList.HasLoadError() {
+			statsLabel = "load error"
+		}
+		if a.inputMode == InputSearch {
+			filtered, total := a.agentList.GetFilterStats()
 			return renderHeaderWithFilter(a.width, contextLabel, statsLabel, filtered, total)
 		}
 		return renderHeader(a.width, contextLabel, statsLabel)
@@ -597,6 +716,12 @@ func (a *AppModel) renderBody(width, height int) string {
 		} else {
 			background = renderCenteredText("Skill list not initialized", width, height)
 		}
+	case ScreenAgents:
+		if a.agentList != nil {
+			background = a.agentList.View(width, height)
+		} else {
+			background = renderCenteredText("Agent list not initialized", width, height)
+		}
 	default:
 		background = renderCenteredText("Unknown screen", width, height)
 	}
@@ -622,6 +747,14 @@ func (a *AppModel) renderBody(width, height int) string {
 			// If CloseSkillDetailMsg is returned, handle in Update
 		}
 		return overlayDialog(background, a.skillDetailView.ViewBox(width), width, height)
+	}
+
+	if a.showingAgentDetail && a.agentDetailView != nil {
+		cmd := a.agentDetailView.Update(tea.WindowSizeMsg{Width: width, Height: height})
+		if cmd != nil {
+			// If CloseAgentDetailMsg is returned, handle in Update
+		}
+		return overlayDialog(background, a.agentDetailView.ViewBox(width), width, height)
 	}
 
 	// Log view (fullscreen, does not preserve background)
@@ -713,7 +846,7 @@ func (a *AppModel) resolveFooterContext() FooterContext {
 		return ctx
 	}
 
-	if a.showingDetail || a.showingSkillDetail {
+	if a.showingDetail || a.showingSkillDetail || a.showingAgentDetail {
 		ctx.Overlay = OverlayDetail
 		return ctx
 	}
@@ -845,6 +978,7 @@ func (a *AppModel) handleTabCompletion() {
 		// First segment: command name completion
 		prefix = segments[0]
 		commands := []string{"sessions", "projects", "skills", "context"}
+		commands = append(commands, "agents")
 		for _, cmd := range commands {
 			if strings.HasPrefix(cmd, prefix) {
 				candidates = append(candidates, cmd)
@@ -901,7 +1035,7 @@ func (a *AppModel) getCompletionSuggestion() string {
 
 	if len(segments) == 1 {
 		prefix = segments[0]
-		commands := []string{"sessions", "projects", "skills", "context"}
+		commands := []string{"sessions", "projects", "skills", "agents", "context"}
 		for _, cmd := range commands {
 			if strings.HasPrefix(cmd, prefix) && cmd != prefix {
 				candidates = append(candidates, cmd)
@@ -972,12 +1106,17 @@ func (a *AppModel) executeCommand(cmdStr string) tea.Cmd {
 		return func() tea.Msg { return SwitchResourceMsg{Resource: ResourceProjects} }
 	case "skills":
 		return func() tea.Msg { return SwitchResourceMsg{Resource: ResourceSkills} }
+	case "agents":
+		return func() tea.Msg { return SwitchResourceMsg{Resource: ResourceAgents} }
 	case "context":
 		// :context all | :context <project-name>
 		if len(parts) < 2 {
 			ctx := a.getSessionContext()
 			if a.currentScreen == ScreenSkills {
 				ctx = a.getSkillContext()
+			}
+			if a.currentScreen == ScreenAgents {
+				ctx = a.getAgentContext()
 			}
 			if ctx.Type == ContextAll {
 				a.SetFlash("Current context: all", false, 2*time.Second)
@@ -1014,6 +1153,10 @@ func (a *AppModel) applySearchToCurrentView(query string) {
 		if a.skillList != nil {
 			a.skillList.ApplyFilter(query)
 		}
+	case ScreenAgents:
+		if a.agentList != nil {
+			a.agentList.ApplyFilter(query)
+		}
 	}
 }
 
@@ -1035,6 +1178,12 @@ func (a *AppModel) clearActiveSearch() bool {
 		if a.skillList != nil && a.skillList.HasActiveFilter() {
 			a.searchInput.SetValue("")
 			a.skillList.ApplyFilter("")
+			return true
+		}
+	case ScreenAgents:
+		if a.agentList != nil && a.agentList.HasActiveFilter() {
+			a.searchInput.SetValue("")
+			a.agentList.ApplyFilter("")
 			return true
 		}
 	}
@@ -1061,4 +1210,11 @@ func formatSkillSummary(width, total, ready, invalid int) string {
 		return fmt.Sprintf("%d skills / R:%d I:%d", total, ready, invalid)
 	}
 	return fmt.Sprintf("%d skills / %d ready / %d invalid", total, ready, invalid)
+}
+
+func formatAgentSummary(width, total, ready, invalid int) string {
+	if width < 120 {
+		return fmt.Sprintf("%d agents / R:%d I:%d", total, ready, invalid)
+	}
+	return fmt.Sprintf("%d agents / %d ready / %d invalid", total, ready, invalid)
 }

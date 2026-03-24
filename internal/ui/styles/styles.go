@@ -46,6 +46,14 @@ var (
 				Foreground(ColorError).
 				Bold(true)
 
+	ReadyAgentStatusStyle = lipgloss.NewStyle().
+				Foreground(ColorActive).
+				Bold(true)
+
+	InvalidAgentStatusStyle = lipgloss.NewStyle().
+				Foreground(ColorError).
+				Bold(true)
+
 	ProjectSkillSourceStyle = lipgloss.NewStyle().
 				Foreground(ColorHighlight).
 				Bold(true)
@@ -55,6 +63,18 @@ var (
 				Bold(true)
 
 	PluginSkillSourceStyle = lipgloss.NewStyle().
+				Foreground(ColorPurple).
+				Bold(true)
+
+	ProjectAgentSourceStyle = lipgloss.NewStyle().
+				Foreground(ColorHighlight).
+				Bold(true)
+
+	UserAgentSourceStyle = lipgloss.NewStyle().
+				Foreground(ColorCompleted).
+				Bold(true)
+
+	PluginAgentSourceStyle = lipgloss.NewStyle().
 				Foreground(ColorPurple).
 				Bold(true)
 
