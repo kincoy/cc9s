@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go" alt="Go version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
-  <a href="https://github.com/kincoy/cc9s/releases"><img src="https://img.shields.io/badge/Release-v0.1.3-green.svg" alt="Release"></a>
+  <a href="https://github.com/kincoy/cc9s/releases"><img src="https://img.shields.io/badge/Release-v0.2.0-green.svg" alt="Release"></a>
 </p>
 
 <p align="center">
@@ -45,6 +45,8 @@ One common flow:
 - **Agent resource browser** — View file-backed Claude Code agents from project, user, and plugin scopes with Ready / Invalid states
 - **Tab completion** — Auto-complete commands and project names
 - **Fully keyboard-driven** — No mouse required
+- **CLI mode** — Read-only command suite for shell scripts and automation (`cc9s status`, `cc9s projects list`, `cc9s sessions list`, etc.)
+- **JSON output** — Structured JSON output via `--json` flag for AI agents and tooling
 
 ## Screenshots
 
@@ -157,6 +159,121 @@ cc9s
 ```
 
 On first launch, cc9s scans `~/.claude/projects/` for projects and sessions, then discovers available resource pages from project roots, user roots, and installed plugins. Today that includes `skills`, `commands`, and file-backed `agents`. This may take a moment if you have many local resources.
+
+## CLI
+
+cc9s v0.2.0 also ships with a read-only CLI for shell workflows, automation, and AI agents. Running `cc9s` with no arguments still launches the TUI; adding arguments switches to CLI mode.
+
+### Start Here
+
+Want to know whether your Claude Code environment looks healthy in one command?
+
+```text
+cc9s status
+
+Example output:
+
+Claude Code Environment
+
+  Projects:   12
+  Sessions:   148
+  Resources:  39
+  Total Size: 82.4 MB
+
+Lifecycle
+  Active:    2
+  Idle:      9
+  Completed: 121
+  Stale:     16
+
+Issues
+  ! stale sessions (16) [11%]
+    Run: cc9s sessions cleanup --dry-run
+  ! invalid skills (1)
+    Run: cc9s skills list --json
+
+Top Projects
+  alpha-service   42 sessions (1 active)  18.6 MB
+  docs-site       31 sessions (0 active)   7.2 MB
+  infra-tooling   27 sessions (1 active)  23.5 MB
+  api-gateway     24 sessions (0 active)  11.4 MB
+  playground      12 sessions (0 active)   4.1 MB
+```
+
+Need the same snapshot for tooling or an AI agent?
+
+```bash
+cc9s status --json
+```
+
+### Full Help
+
+The CLI surface is best viewed directly from the binary:
+
+```text
+cc9s -h
+
+cc9s — Claude Code session manager
+
+Usage:
+  cc9s                      Launch TUI (default, no arguments)
+  cc9s status               Environment health overview
+  cc9s projects list        List all projects
+  cc9s projects inspect <name>  Project details (match by name or path)
+  cc9s sessions list        List sessions across all projects
+  cc9s sessions inspect <id>   Session details (exact ID from list output)
+  cc9s sessions cleanup --dry-run  Preview stale/old sessions (read-only)
+  cc9s skills list          List skills and commands
+  cc9s agents list          List agents
+  cc9s agents inspect <name>   Agent details (match by name or path)
+  cc9s version              Print version
+  cc9s help                 Print this help
+
+Short flags:
+  -h, --help                Show help
+  -v, --version             Print version
+
+Commands and flags:
+  status                   (no extra flags)
+  projects list            --limit <n>  --sort <field>  --json
+  projects inspect <name>  --json
+  sessions list            --project <name>  --state <state>  --limit <n>  --sort <field>  --json
+  sessions inspect <id>    --json
+  sessions cleanup         --dry-run  --project <name>  --state <state>  --older-than <dur>  --json
+  skills list              --project <name>  --scope <scope>  --type <type>  --json
+  agents list              --project <name>  --scope <scope>  --json
+  agents inspect <name>    --json
+
+  --json is supported on all commands. Default output is human-readable text.
+
+Enumerations:
+  --state <state>          Active, Idle, Completed, Stale (case-insensitive partial match)
+  --scope <scope>          User, Project, Plugin (case-insensitive partial match)
+  --type <type>            Skill, Command (case-insensitive partial match)
+  --sort <field>           projects: name, sessions | sessions: updated, state, project
+  --older-than <dur>       Duration, e.g. 72h, 7d, 168h, 30m
+
+Resource aliases:
+  projects | project | proj
+  sessions | session | ss
+  skills   | skill   | sk
+  agents   | agent   | ag
+
+Output:
+  list commands           -> JSON array of objects
+  status / inspect / cleanup -> JSON single object
+  errors                  -> {"error":"<message>"}
+  All timestamps are RFC 3339. Paths are absolute.
+
+Common patterns:
+  cc9s status                              Quick environment health check
+  cc9s status --json                        Machine-readable overview
+  cc9s sessions list --state active --json  Find active sessions, get full IDs
+  cc9s sessions inspect <id> --json         Full session details (model, tokens, lifecycle)
+  cc9s sessions cleanup --dry-run           Preview what would be cleaned up
+  cc9s projects inspect cc9s               Inspect a specific project
+  cc9s skills list --project cc9s --json    Skills for one project
+```
 
 ## Key Bindings
 
