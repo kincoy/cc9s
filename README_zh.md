@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go" alt="Go version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
-  <a href="https://github.com/kincoy/cc9s/releases"><img src="https://img.shields.io/badge/Release-v0.1.3-green.svg" alt="Release"></a>
+  <a href="https://github.com/kincoy/cc9s/releases"><img src="https://img.shields.io/badge/Release-v0.2.0-green.svg" alt="Release"></a>
 </p>
 
 <p align="center">
@@ -45,6 +45,8 @@ cc9s 提供了一个全屏终端 UI（灵感来自 [k9s](https://github.com/dera
 - **Agent 资源页** — 查看来自项目级、用户级和 plugin 的 file-backed agents，并区分 Ready / Invalid 状态
 - **Tab 补全** — 自动补全命令和项目名
 - **完全键盘驱动** — 无需鼠标
+- **CLI 模式** — 面向 shell、自动化和 AI agent 的只读命令套件（`cc9s status`、`cc9s projects list`、`cc9s sessions list` 等）
+- **JSON 输出** — 通过显式 `--json` 返回结构化结果
 
 ## 截图
 
@@ -157,6 +159,121 @@ cc9s
 ```
 
 首次启动时，cc9s 会扫描 `~/.claude/projects/`，然后发现项目级、用户级和已安装 plugin 中可用的资源页。目前包括 `skills`、`commands` 和 file-backed `agents`。如果本地资源很多，首次加载可能需要几秒。
+
+## CLI
+
+从 v0.2.0 开始，cc9s 也提供一套只读 CLI，适合 shell 工作流、自动化任务和 AI agent 使用。`cc9s` 无参数时仍然启动 TUI；传入参数时则进入 CLI 模式。
+
+### 先从这个命令开始
+
+如果你只想先知道本地 Claude Code 环境现在大概是什么状态，直接运行：
+
+```text
+cc9s status
+
+示例输出：
+
+Claude Code Environment
+
+  Projects:   12
+  Sessions:   148
+  Resources:  39
+  Total Size: 82.4 MB
+
+Lifecycle
+  Active:    2
+  Idle:      9
+  Completed: 121
+  Stale:     16
+
+Issues
+  ! stale sessions (16) [11%]
+    Run: cc9s sessions cleanup --dry-run
+  ! invalid skills (1)
+    Run: cc9s skills list --json
+
+Top Projects
+  alpha-service   42 sessions (1 active)  18.6 MB
+  docs-site       31 sessions (0 active)   7.2 MB
+  infra-tooling   27 sessions (1 active)  23.5 MB
+  api-gateway     24 sessions (0 active)  11.4 MB
+  playground      12 sessions (0 active)   4.1 MB
+```
+
+如果是给自动化或 AI agent 用，就运行：
+
+```bash
+cc9s status --json
+```
+
+### 完整帮助
+
+CLI 的完整命令面，直接以二进制帮助输出为准：
+
+```text
+cc9s -h
+
+cc9s — Claude Code session manager
+
+Usage:
+  cc9s                      Launch TUI (default, no arguments)
+  cc9s status               Environment health overview
+  cc9s projects list        List all projects
+  cc9s projects inspect <name>  Project details (match by name or path)
+  cc9s sessions list        List sessions across all projects
+  cc9s sessions inspect <id>   Session details (exact ID from list output)
+  cc9s sessions cleanup --dry-run  Preview stale/old sessions (read-only)
+  cc9s skills list          List skills and commands
+  cc9s agents list          List agents
+  cc9s agents inspect <name>   Agent details (match by name or path)
+  cc9s version              Print version
+  cc9s help                 Print this help
+
+Short flags:
+  -h, --help                Show help
+  -v, --version             Print version
+
+Commands and flags:
+  status                   (no extra flags)
+  projects list            --limit <n>  --sort <field>  --json
+  projects inspect <name>  --json
+  sessions list            --project <name>  --state <state>  --limit <n>  --sort <field>  --json
+  sessions inspect <id>    --json
+  sessions cleanup         --dry-run  --project <name>  --state <state>  --older-than <dur>  --json
+  skills list              --project <name>  --scope <scope>  --type <type>  --json
+  agents list              --project <name>  --scope <scope>  --json
+  agents inspect <name>    --json
+
+  --json is supported on all commands. Default output is human-readable text.
+
+Enumerations:
+  --state <state>          Active, Idle, Completed, Stale (case-insensitive partial match)
+  --scope <scope>          User, Project, Plugin (case-insensitive partial match)
+  --type <type>            Skill, Command (case-insensitive partial match)
+  --sort <field>           projects: name, sessions | sessions: updated, state, project
+  --older-than <dur>       Duration, e.g. 72h, 7d, 168h, 30m
+
+Resource aliases:
+  projects | project | proj
+  sessions | session | ss
+  skills   | skill   | sk
+  agents   | agent   | ag
+
+Output:
+  list commands           -> JSON array of objects
+  status / inspect / cleanup -> JSON single object
+  errors                  -> {"error":"<message>"}
+  All timestamps are RFC 3339. Paths are absolute.
+
+Common patterns:
+  cc9s status                              Quick environment health check
+  cc9s status --json                        Machine-readable overview
+  cc9s sessions list --state active --json  Find active sessions, get full IDs
+  cc9s sessions inspect <id> --json         Full session details (model, tokens, lifecycle)
+  cc9s sessions cleanup --dry-run           Preview what would be cleaned up
+  cc9s projects inspect cc9s               Inspect a specific project
+  cc9s skills list --project cc9s --json    Skills for one project
+```
 
 ## 快捷键
 

@@ -6,6 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/kincoy/cc9s/internal/ui/styles"
+	"github.com/kincoy/cc9s/internal/version"
 )
 
 func renderHeader(width int, contextLabel, stats string) string {
@@ -31,7 +32,7 @@ func renderHeaderWithFilter(width int, contextLabel, stats string, filteredCount
 			Render(content)
 	}
 
-	logo := styles.TitleStyle.Render("cc9s v0.1.3")
+	logo := styles.TitleStyle.Render("cc9s v" + version.Version)
 	statsRendered := styles.NormalStyle.Render(fmt.Sprintf("%s / %s", contextLabel, statsLabel))
 	clock := styles.DimStyle.Render(time.Now().Format("15:04:05"))
 	sep := styles.DimStyle.Render(" │ ")
