@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go" alt="Go version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
-  <a href="https://github.com/kincoy/cc9s/releases"><img src="https://img.shields.io/badge/Release-v0.2.0-green.svg" alt="Release"></a>
+  <a href="https://github.com/kincoy/cc9s/releases"><img src="https://img.shields.io/badge/Release-v0.2.1-green.svg" alt="Release"></a>
 </p>
 
 <p align="center">
@@ -45,6 +45,7 @@ One common flow:
 - **Agent resource browser** — View file-backed Claude Code agents from project, user, and plugin scopes with Ready / Invalid states
 - **Tab completion** — Auto-complete commands and project names
 - **Fully keyboard-driven** — No mouse required
+- **Built-in themes** — 4 color presets (`default`, `dark-solid`, `high-contrast`, `gruvbox`), switchable via `--theme` flag or `CC9S_THEME` env
 - **CLI mode** — Read-only command suite for shell scripts and automation (`cc9s status`, `cc9s projects list`, `cc9s sessions list`, etc.)
 - **JSON output** — Structured JSON output via `--json` flag for AI agents and tooling
 
@@ -162,7 +163,7 @@ On first launch, cc9s scans `~/.claude/projects/` for projects and sessions, the
 
 ## CLI
 
-cc9s v0.2.0 also ships with a read-only CLI for shell workflows, automation, and AI agents. Running `cc9s` with no arguments still launches the TUI; adding arguments switches to CLI mode.
+cc9s also ships with a read-only CLI for shell workflows, automation, and AI agents. Running `cc9s` with no arguments still launches the TUI; adding arguments switches to CLI mode.
 
 ### Start Here
 
@@ -227,11 +228,14 @@ Usage:
   cc9s agents list          List agents
   cc9s agents inspect <name>   Agent details (match by name or path)
   cc9s version              Print version
+  cc9s themes               List available built-in themes
   cc9s help                 Print this help
 
 Short flags:
   -h, --help                Show help
   -v, --version             Print version
+  --theme <name>            Apply theme at startup (default, dark-solid, high-contrast, gruvbox)
+  CC9S_THEME env            Same as --theme but set via environment variable
 
 Commands and flags:
   status                   (no extra flags)
