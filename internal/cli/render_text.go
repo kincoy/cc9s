@@ -44,6 +44,8 @@ func renderTextMode(w *os.File, result CommandResult) {
 		renderAgentListText(w, r)
 	case AgentDetailResult:
 		renderAgentDetailText(w, r)
+	case ThemesResult:
+		renderThemesText(w, r)
 	case CleanupResult:
 		renderCleanupText(w, r)
 	case HelpResult:
@@ -261,6 +263,23 @@ func renderAgentDetailText(w io.Writer, r AgentDetailResult) {
 			fmt.Fprintf(w, "    - %s\n", reason)
 		}
 	}
+}
+
+// --- Themes ---
+
+func renderThemesText(w io.Writer, r ThemesResult) {
+	fmt.Fprintln(w, "Available themes:")
+	fmt.Fprintln(w)
+	for _, t := range r.Themes {
+		marker := "  "
+		if t.Current {
+			marker = "* "
+		}
+		fmt.Fprintf(w, "  %s%-16s %s\n", marker, t.Name, t.Description)
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "Current: %s\n", r.Current)
+	fmt.Fprintln(w, "Usage: cc9s --theme <name>  or  CC9S_THEME=<name> cc9s")
 }
 
 // --- Cleanup ---

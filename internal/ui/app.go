@@ -476,6 +476,15 @@ func (a *AppModel) View() tea.View {
 		}
 	}
 
+	// Apply forced background if theme requires it
+	if styles.ForceBackground && styles.ColorBackground != nil {
+		content = lipgloss.NewStyle().
+			Background(styles.ColorBackground).
+			Width(a.width).
+			Height(a.height).
+			Render(content)
+	}
+
 	v := tea.NewView(content)
 	v.AltScreen = true
 	return v

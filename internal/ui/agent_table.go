@@ -78,7 +78,7 @@ func renderAgentTable(agents []claudefs.AgentResource, cursor, width, height int
 		if !col.visible {
 			continue
 		}
-		headerParts = append(headerParts, headerSep)
+		headerParts = append(headerParts, headerSep())
 		isSorted := sortBy == col.sort
 		text := col.text
 		if isSorted {

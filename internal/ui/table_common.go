@@ -65,23 +65,25 @@ func fillEmptyRows(sb *strings.Builder, contentWidth, actualRows, visibleHeight 
 
 // headerStyle returns the header cell style
 func headerStyle(sorted bool) lipgloss.Style {
-	bg := lipgloss.Color("#1a1a2e")
 	if sorted {
 		return lipgloss.NewStyle().
 			Foreground(styles.ColorHighlight).
-			Background(bg).
+			Background(styles.ColorTableHeaderBg).
 			Bold(true)
 	}
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#FFFFFF")).
-		Background(bg).
+		Background(styles.ColorTableHeaderBg).
 		Bold(true)
 }
 
-// headerSep header column separator (with background color for continuity)
-var headerSep = lipgloss.NewStyle().
-	Background(lipgloss.Color("#1a1a2e")).
-	Render("  ")
+// headerSep returns the header column separator (with background color for continuity).
+// It is a function instead of a var so it reads the color at call time (after theme is applied).
+func headerSep() string {
+	return lipgloss.NewStyle().
+		Background(styles.ColorTableHeaderBg).
+		Render("  ")
+}
 
 // sortArrow returns the sort direction arrow
 func sortArrow(asc bool) string {

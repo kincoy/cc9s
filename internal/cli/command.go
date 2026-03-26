@@ -19,6 +19,7 @@ const (
 	CmdSessions
 	CmdSkills
 	CmdAgents
+	CmdThemes
 )
 
 // Verb identifies the action on a resource.
@@ -307,6 +308,21 @@ type AgentConfiguration struct {
 type AgentValidation struct {
 	Valid   bool     `json:"valid"`
 	Reasons []string `json:"reasons"`
+}
+
+// ThemesResult is the output of the themes command.
+type ThemesResult struct {
+	Themes  []ThemeEntry `json:"-"`
+	Current string       `json:"-"`
+}
+
+func (ThemesResult) isCommandResult() {}
+
+// ThemeEntry is one row in themes list.
+type ThemeEntry struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Current     bool   `json:"current"`
 }
 
 // CleanupResult is the output of sessions cleanup --dry-run.
