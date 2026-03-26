@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go" alt="Go version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
-  <a href="https://github.com/kincoy/cc9s/releases"><img src="https://img.shields.io/badge/Release-v0.2.0-green.svg" alt="Release"></a>
+  <a href="https://github.com/kincoy/cc9s/releases"><img src="https://img.shields.io/badge/Release-v0.2.1-green.svg" alt="Release"></a>
 </p>
 
 <p align="center">
@@ -45,6 +45,7 @@ cc9s 提供了一个全屏终端 UI（灵感来自 [k9s](https://github.com/dera
 - **Agent 资源页** — 查看来自项目级、用户级和 plugin 的 file-backed agents，并区分 Ready / Invalid 状态
 - **Tab 补全** — 自动补全命令和项目名
 - **完全键盘驱动** — 无需鼠标
+- **内置主题** — 4 种色彩预设（`default`、`dark-solid`、`high-contrast`、`gruvbox`），通过 `--theme` 参数或 `CC9S_THEME` 环境变量切换
 - **CLI 模式** — 面向 shell、自动化和 AI agent 的只读命令套件（`cc9s status`、`cc9s projects list`、`cc9s sessions list` 等）
 - **JSON 输出** — 通过显式 `--json` 返回结构化结果
 
@@ -162,7 +163,7 @@ cc9s
 
 ## CLI
 
-从 v0.2.0 开始，cc9s 也提供一套只读 CLI，适合 shell 工作流、自动化任务和 AI agent 使用。`cc9s` 无参数时仍然启动 TUI；传入参数时则进入 CLI 模式。
+cc9s 也提供一套只读 CLI，适合 shell 工作流、自动化任务和 AI agent 使用。`cc9s` 无参数时仍然启动 TUI；传入参数时则进入 CLI 模式。
 
 ### 先从这个命令开始
 
@@ -227,11 +228,14 @@ Usage:
   cc9s agents list          List agents
   cc9s agents inspect <name>   Agent details (match by name or path)
   cc9s version              Print version
+  cc9s themes               列出可用的内置主题
   cc9s help                 Print this help
 
 Short flags:
   -h, --help                Show help
   -v, --version             Print version
+  --theme <name>            启动时应用主题 (default, dark-solid, high-contrast, gruvbox)
+  CC9S_THEME env            通过环境变量设置主题（效果同 --theme）
 
 Commands and flags:
   status                   (no extra flags)
