@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kincoy/cc9s/internal/claudefs"
+	"github.com/kincoy/cc9s/internal/ui/styles"
 	"github.com/kincoy/cc9s/internal/version"
 )
 
@@ -25,6 +26,7 @@ Usage:
   cc9s skills list          List skills and commands
   cc9s agents list          List agents
   cc9s agents inspect <name>   Agent details (match by name or path)
+  cc9s themes               List available themes
   cc9s version              Print version
   cc9s help                 Print this help
 
@@ -91,6 +93,8 @@ func Execute(cmd *Command) (CommandResult, error) {
 		return executeSkills(cmd)
 	case CmdAgents:
 		return executeAgents(cmd)
+	case CmdThemes:
+		return executeThemes(cmd)
 	default:
 		return nil, CLIError{Message: "unknown command"}
 	}
@@ -668,6 +672,34 @@ func executeAgentsInspect(cmd *Command, agents []claudefs.AgentResource) (Comman
 			},
 		},
 	}, nil
+}
+
+// --- Themes ---
+
+func executeThemes(cmd *Command) (CommandResult, error) {
+	names := styles.AvailableThemes()
+	descriptions := themeDescriptions()
+	entries := make([]ThemeEntry, 0, len(names))
+	for _, name := range names {
+		entries = append(entries, ThemeEntry{
+			Name:        name,
+			Description: descriptions[name],
+			Current:     name == styles.CurrentThemeName,
+		})
+	}
+	return ThemesResult{
+		Themes:  entries,
+		Current: styles.CurrentThemeName,
+	}, nil
+}
+
+func themeDescriptions() map[string]string {
+	return map[string]string{
+		"default":       "Optimized default, transparent-friendly",
+		"dark-solid":    "Forced dark background",
+		"high-contrast": "Maximum readability",
+		"gruvbox":       "Warm retro palette",
+	}
 }
 
 // --- Helpers ---

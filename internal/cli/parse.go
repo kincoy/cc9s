@@ -117,6 +117,11 @@ func Parse(args []string) (*Command, error) {
 		return cmd, nil
 	}
 
+	if first == "themes" {
+		cmd.TopLevel = CmdThemes
+		return cmd, nil
+	}
+
 	// Check resource aliases
 	if topLevel, ok := resourceAliases[first]; ok {
 		cmd.TopLevel = topLevel

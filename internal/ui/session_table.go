@@ -99,7 +99,7 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 		if !col.editable {
 			continue
 		}
-		headerParts = append(headerParts, headerSep)
+		headerParts = append(headerParts, headerSep())
 		isSorted := sortBy == col.sort
 		text := col.text
 		if isSorted {

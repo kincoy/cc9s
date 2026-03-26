@@ -105,7 +105,7 @@ func renderProjectTable(projects []claudefs.Project, cursor, width, height int, 
 	var headerParts []string
 	for i, h := range visibleHeaders {
 		if i > 0 {
-			headerParts = append(headerParts, headerSep)
+			headerParts = append(headerParts, headerSep())
 		}
 		if h.field == sortBy {
 			headerParts = append(headerParts, headerStyle(true).Width(h.width).Align(h.align).Render(renderProjectHeaderLabel(h.text, h.width, sortAsc)))
