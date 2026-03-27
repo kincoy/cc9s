@@ -49,6 +49,7 @@ type AppModel struct {
 	height   int
 	ready    bool
 	showHelp bool
+	helpScroll int
 	quitting bool
 	homeDir  string
 
@@ -373,8 +374,42 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Quit
 		case "?":
 			a.showHelp = !a.showHelp
+			if a.showHelp {
+				a.helpScroll = 0
+			}
+			return a, nil
 		case "esc":
+			if a.showHelp {
+				a.showHelp = false
+				a.helpScroll = 0
+				return a, nil
+			}
 			if a.clearActiveSearch() {
+				return a, nil
+			}
+		case "j", "down":
+			if a.showHelp {
+				maxScroll := a.maxHelpScroll()
+				if a.helpScroll < maxScroll {
+					a.helpScroll++
+				}
+				return a, nil
+			}
+		case "k", "up":
+			if a.showHelp {
+				if a.helpScroll > 0 {
+					a.helpScroll--
+				}
+				return a, nil
+			}
+		case "g":
+			if a.showHelp {
+				a.helpScroll = 0
+				return a, nil
+			}
+		case "G":
+			if a.showHelp {
+				a.helpScroll = a.maxHelpScroll()
 				return a, nil
 			}
 		case "/":
@@ -623,7 +658,7 @@ func (a *AppModel) renderBody(width, height int) string {
 
 	// Help panel
 	if a.showHelp {
-		return renderHelp(width, height, a.resourceRegistry, a.currentResourceDescriptor())
+		return renderHelp(width, height, a.resourceRegistry, a.currentResourceDescriptor(), a.helpScroll)
 	}
 
 	// Normal view
@@ -1112,4 +1147,29 @@ func formatAgentSummary(width, total, ready, invalid int) string {
 		return fmt.Sprintf("%d agents / R:%d I:%d", total, ready, invalid)
 	}
 	return fmt.Sprintf("%d agents / %d ready / %d invalid", total, ready, invalid)
+}
+
+func (a *AppModel) helpViewportHeight() int {
+	if a.height < 6 {
+		bodyHeight := a.height - 1
+		if bodyHeight < 1 {
+			return 1
+		}
+		return bodyHeight
+	}
+
+	bodyHeight := a.height - 4
+	if bodyHeight < 1 {
+		return 1
+	}
+	return bodyHeight
+}
+
+func (a *AppModel) maxHelpScroll() int {
+	lines := buildHelpLines(a.resourceRegistry, a.currentResourceDescriptor())
+	maxScroll := len(lines) - a.helpViewportHeight()
+	if maxScroll < 0 {
+		return 0
+	}
+	return maxScroll
 }

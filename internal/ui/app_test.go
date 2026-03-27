@@ -173,6 +173,75 @@ func TestEscClearsActiveAgentSearchBeforeOtherNavigation(t *testing.T) {
 	}
 }
 
+func TestEscClosesHelpOverlay(t *testing.T) {
+	app := NewAppModel()
+	app.showHelp = true
+
+	model, cmd := app.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if cmd != nil {
+		t.Fatalf("expected no command when closing help, got %v", cmd)
+	}
+
+	appModel, ok := model.(*AppModel)
+	if !ok {
+		t.Fatalf("expected *AppModel, got %T", model)
+	}
+	if appModel.showHelp {
+		t.Fatal("expected esc to close help overlay")
+	}
+}
+
+func TestHelpOverlayScrollsWithJK(t *testing.T) {
+	app := NewAppModel()
+	app.showHelp = true
+	app.helpScroll = 0
+	app.height = 20
+	app.width = 120
+
+	model, cmd := app.Update(tea.KeyPressMsg{Text: "j", Code: 'j'})
+	if cmd != nil {
+		t.Fatalf("expected no command when scrolling help, got %v", cmd)
+	}
+
+	appModel, ok := model.(*AppModel)
+	if !ok {
+		t.Fatalf("expected *AppModel, got %T", model)
+	}
+	if appModel.helpScroll != 1 {
+		t.Fatalf("helpScroll = %d, want 1", appModel.helpScroll)
+	}
+
+	model, cmd = appModel.Update(tea.KeyPressMsg{Text: "k", Code: 'k'})
+	if cmd != nil {
+		t.Fatalf("expected no command when scrolling help up, got %v", cmd)
+	}
+
+	appModel = model.(*AppModel)
+	if appModel.helpScroll != 0 {
+		t.Fatalf("helpScroll = %d, want 0", appModel.helpScroll)
+	}
+}
+
+func TestHelpOverlayScrollDoesNotExceedMax(t *testing.T) {
+	app := NewAppModel()
+	app.showHelp = true
+	app.height = 20
+	app.width = 120
+
+	maxScroll := app.maxHelpScroll()
+	app.helpScroll = maxScroll
+
+	model, cmd := app.Update(tea.KeyPressMsg{Text: "j", Code: 'j'})
+	if cmd != nil {
+		t.Fatalf("expected no command when scrolling help at bottom, got %v", cmd)
+	}
+
+	appModel := model.(*AppModel)
+	if appModel.helpScroll != maxScroll {
+		t.Fatalf("helpScroll = %d, want %d", appModel.helpScroll, maxScroll)
+	}
+}
+
 func TestAgentLoadErrorBlocksSearchMode(t *testing.T) {
 	app := NewAppModel()
 	app.setActiveResource(ResourceAgents)

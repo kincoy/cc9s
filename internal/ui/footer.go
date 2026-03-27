@@ -60,7 +60,10 @@ func hintsForContext(ctx FooterContext) []KeyHint {
 
 	case OverlayHelp:
 		return []KeyHint{
+			{Key: "j/k", Label: "Scroll"},
+			{Key: "g/G", Label: "Top/Bottom"},
 			{Key: "Esc", Label: "Close"},
+			{Key: "?", Label: "Close"},
 		}
 
 	case OverlayDetail:
