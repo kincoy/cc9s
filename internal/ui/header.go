@@ -9,20 +9,25 @@ import (
 	"github.com/kincoy/cc9s/internal/version"
 )
 
-func renderHeader(width int, contextLabel, stats string) string {
-	return renderHeaderWithFilter(width, contextLabel, stats, 0, 0)
+func renderHeader(width int, resourceLabel, contextLabel, stats string) string {
+	return renderHeaderWithFilter(width, resourceLabel, contextLabel, stats, 0, 0)
 }
 
 // renderHeaderWithFilter renders the header with optional filtered-count display.
-func renderHeaderWithFilter(width int, contextLabel, stats string, filteredCount, totalCount int) string {
+func renderHeaderWithFilter(width int, resourceLabel, contextLabel, stats string, filteredCount, totalCount int) string {
 	statsLabel := stats
 	if totalCount > 0 && filteredCount != totalCount {
 		statsLabel = fmt.Sprintf("%d/%d shown / %s", filteredCount, totalCount, stats)
 	}
 
+	scopeLabel := resourceLabel
+	if contextLabel != "" {
+		scopeLabel = fmt.Sprintf("%s: %s", resourceLabel, contextLabel)
+	}
+
 	if width < 100 {
 		logo := styles.TitleStyle.Render("cc9s")
-		statsRendered := styles.NormalStyle.Render(fmt.Sprintf("%s / %s", contextLabel, statsLabel))
+		statsRendered := styles.NormalStyle.Render(fmt.Sprintf("%s / %s", scopeLabel, statsLabel))
 		sep := styles.DimStyle.Render(" │ ")
 
 		content := fmt.Sprintf(" %s%s%s ", logo, sep, statsRendered)
@@ -33,7 +38,7 @@ func renderHeaderWithFilter(width int, contextLabel, stats string, filteredCount
 	}
 
 	logo := styles.TitleStyle.Render("cc9s v" + version.Version)
-	statsRendered := styles.NormalStyle.Render(fmt.Sprintf("%s / %s", contextLabel, statsLabel))
+	statsRendered := styles.NormalStyle.Render(fmt.Sprintf("%s / %s", scopeLabel, statsLabel))
 	clock := styles.DimStyle.Render(time.Now().Format("15:04:05"))
 	sep := styles.DimStyle.Render(" │ ")
 

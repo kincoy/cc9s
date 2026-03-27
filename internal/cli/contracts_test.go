@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/kincoy/cc9s/internal/claudefs"
 )
 
 func TestWriteErrorJSONUsesStdout(t *testing.T) {
@@ -211,5 +213,74 @@ func TestRenderCleanupTextShowsRecommendationGroups(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("cleanup text missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestStatusResultJSONIncludesHealthField(t *testing.T) {
+	data, err := json.Marshal(StatusResult{
+		Projects:  2,
+		Sessions:  8,
+		Resources: 3,
+		Health: &claudefs.HealthMetrics{
+			EnvironmentScore: 72,
+			ProjectScores: []claudefs.ProjectHealthScore{
+				{ProjectName: "cc9s", HealthScore: 72, SessionCount: 4},
+			},
+			Recommendations: []string{"Environment health looks good"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal status result: %v", err)
+	}
+
+	out := string(data)
+	if !strings.Contains(out, `"health":`) {
+		t.Fatalf("status json missing health field:\n%s", out)
+	}
+	legacyField := `"dash` + `board":`
+	if strings.Contains(out, legacyField) {
+		t.Fatalf("status json should not include unexpected legacy field:\n%s", out)
+	}
+}
+
+func TestRenderStatusTextShowsHealthSummary(t *testing.T) {
+	out := renderStatusText(StatusResult{
+		Projects:  2,
+		Sessions:  8,
+		Resources: 3,
+		Lifecycle: LifecycleSummary{
+			Active: 2,
+		},
+		Health: &claudefs.HealthMetrics{
+			EnvironmentScore: 61,
+			ProjectScores: []claudefs.ProjectHealthScore{
+				{ProjectName: "helm-charts", HealthScore: 48, StaleRatio: 0.56, ActivityScore: 24},
+			},
+			Recommendations: []string{"Project helm-charts: cleanup recommended"},
+		},
+	})
+
+	for _, unwanted := range []string{
+		"Usage Trend",
+		"Activity Overview",
+		"Resource Usage",
+		"Health Scores",
+	} {
+		if strings.Contains(out, unwanted) {
+			t.Fatalf("status text should not include unexpected section %q:\n%s", unwanted, out)
+		}
+	}
+	for _, want := range []string{
+		"Environment Overview",
+		"Health: 61/100",
+		"Lowest Health Projects",
+		"Recommendations",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("status text missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Count(out, "Lowest Health Projects") != 1 {
+		t.Fatalf("lowest health heading should appear once:\n%s", out)
 	}
 }

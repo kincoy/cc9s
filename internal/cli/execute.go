@@ -131,9 +131,19 @@ func Run(args []string) int {
 // --- Status ---
 
 func executeStatus(cmd *Command) (CommandResult, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, CLIError{Message: "failed to get home directory"}
+	}
+
 	scanResult := claudefs.ScanProjects()
 	if scanResult.Err != nil {
 		return nil, CLIError{Message: fmt.Sprintf("scan projects: %v", scanResult.Err)}
+	}
+
+	health, err := claudefs.ComputeHealthMetrics(homeDir)
+	if err != nil {
+		health = claudefs.HealthMetrics{}
 	}
 
 	// Scan skills and agents for resource count
@@ -223,6 +233,7 @@ func executeStatus(cmd *Command) (CommandResult, error) {
 		},
 		Issues:      issues,
 		TopProjects: topProjects,
+		Health:      &health,
 	}, nil
 }
 

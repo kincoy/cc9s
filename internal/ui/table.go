@@ -11,7 +11,7 @@ import (
 )
 
 // renderProjectTable renders the project table (Approach A: manually drawn borders, title embedded in top border)
-func renderProjectTable(projects []claudefs.Project, cursor, width, height int, sortBy SortField, sortAsc bool) string {
+func renderProjectTable(projects []claudefs.Project, cursor, width, height int, sortBy SortField, sortAsc bool, showHealthColumn bool, projectHealth map[string]int) string {
 	if len(projects) == 0 {
 		return renderEmptyState(width, height)
 	}
@@ -41,6 +41,10 @@ func renderProjectTable(projects []claudefs.Project, cursor, width, height int, 
 	agentsWidth := 10
 	lastActiveWidth := 14
 	sizeWidth := 10
+	healthWidth := 0
+	if showHealthColumn {
+		healthWidth = 8
+	}
 
 	sepCount := 5
 	if showPath {
@@ -49,9 +53,12 @@ func renderProjectTable(projects []claudefs.Project, cursor, width, height int, 
 	if !showSize {
 		sepCount--
 	}
+	if showHealthColumn {
+		sepCount++
+	}
 	sepWidth := sepCount * 2
 
-	fixedWidth := sessionsWidth + skillsWidth + agentsWidth + lastActiveWidth + sepWidth
+	fixedWidth := sessionsWidth + skillsWidth + agentsWidth + lastActiveWidth + healthWidth + sepWidth
 	if showSize {
 		fixedWidth += sizeWidth
 	}
@@ -84,6 +91,7 @@ func renderProjectTable(projects []claudefs.Project, cursor, width, height int, 
 		{"LOCAL SK", skillsWidth, lipgloss.Right, SortBySkillCount},
 		{"LOCAL AG", agentsWidth, lipgloss.Right, SortByAgentCount},
 		{"LAST ACTIVE", lastActiveWidth, lipgloss.Right, SortByActivity},
+		{"HEALTH", healthWidth, lipgloss.Right, SortByHealth},
 		{"SIZE", sizeWidth, lipgloss.Right, SortBySize},
 	}
 	visibleHeaders := make([]struct {
@@ -97,6 +105,9 @@ func renderProjectTable(projects []claudefs.Project, cursor, width, height int, 
 			continue
 		}
 		if h.field == SortBySize && !showSize {
+			continue
+		}
+		if h.text == "HEALTH" && !showHealthColumn {
 			continue
 		}
 		visibleHeaders = append(visibleHeaders, h)
@@ -143,42 +154,65 @@ func renderProjectTable(projects []claudefs.Project, cursor, width, height int, 
 		agents := fmt.Sprintf("%d", project.AgentCount)
 		lastActive := claudefs.FormatTimeAgo(project.LastActiveAt)
 
+		var rowStyle lipgloss.Style
+		if i == cursor {
+			rowStyle = styles.SelectedRowStyle
+		} else {
+			rowStyle = styles.TableCellStyle
+		}
+		rowSep := rowStyle.Render("  ")
+
 		var rowParts []string
 		rowParts = append(rowParts,
-			lipgloss.NewStyle().Width(nameWidth).Render(name),
-			lipgloss.NewStyle().Render("  "),
+			rowStyle.Width(nameWidth).Render(name),
+			rowSep,
 		)
 		if showPath {
 			rowParts = append(rowParts,
-				lipgloss.NewStyle().Width(pathWidth).Render(path),
-				lipgloss.NewStyle().Render("  "),
+				rowStyle.Width(pathWidth).Render(path),
+				rowSep,
 			)
 		}
 		rowParts = append(rowParts,
-			lipgloss.NewStyle().Width(sessionsWidth).Align(lipgloss.Right).Render(sessions),
-			lipgloss.NewStyle().Render("  "),
-			lipgloss.NewStyle().Width(skillsWidth).Align(lipgloss.Right).Render(skills),
-			lipgloss.NewStyle().Render("  "),
-			lipgloss.NewStyle().Width(agentsWidth).Align(lipgloss.Right).Render(agents),
-			lipgloss.NewStyle().Render("  "),
-			lipgloss.NewStyle().Width(lastActiveWidth).Align(lipgloss.Right).Render(lastActive),
+			rowStyle.Width(sessionsWidth).Align(lipgloss.Right).Render(sessions),
+			rowSep,
+			rowStyle.Width(skillsWidth).Align(lipgloss.Right).Render(skills),
+			rowSep,
+			rowStyle.Width(agentsWidth).Align(lipgloss.Right).Render(agents),
+			rowSep,
+			rowStyle.Width(lastActiveWidth).Align(lipgloss.Right).Render(lastActive),
 		)
+		if showHealthColumn {
+			health := projectHealth[project.Name]
+			healthColor := styles.ColorNormal
+			if health >= 70 {
+				healthColor = styles.ColorActive
+			} else if health >= 50 {
+				healthColor = styles.ColorWarning
+			} else {
+				healthColor = styles.ColorError
+			}
+			healthField := lipgloss.NewStyle().
+				Foreground(healthColor).
+				Inherit(rowStyle).
+				Width(healthWidth).
+				Align(lipgloss.Right).
+				Render(fmt.Sprintf("%d", health))
+			rowParts = append(rowParts,
+				rowSep,
+				healthField,
+			)
+		}
 		if showSize {
 			size := claudefs.FormatSize(project.TotalSize)
 			rowParts = append(rowParts,
-				lipgloss.NewStyle().Render("  "),
-				lipgloss.NewStyle().Width(sizeWidth).Align(lipgloss.Right).Render(size),
+				rowSep,
+				rowStyle.Width(sizeWidth).Align(lipgloss.Right).Render(size),
 			)
 		}
 
 		rowContent := lipgloss.JoinHorizontal(lipgloss.Top, rowParts...)
-
-		var row string
-		if i == cursor {
-			row = styles.SelectedRowStyle.Width(contentWidth).Render(rowContent)
-		} else {
-			row = styles.TableCellStyle.Width(contentWidth).Render(rowContent)
-		}
+		row := rowStyle.Width(contentWidth).Render(rowContent)
 
 		sb.WriteString(renderRowBorder(row))
 	}

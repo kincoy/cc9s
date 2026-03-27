@@ -72,8 +72,8 @@ func newResourceRegistry() *ResourceRegistry {
 			HeaderState: func(a *AppModel) ResourceHeaderState {
 				projectCount, totalSessions, activeCount := a.projectList.GetStats()
 				state := ResourceHeaderState{
-					ContextLabel: formatProjectContextLabel(projectCount),
-					StatsLabel:   formatProjectSummary(totalSessions, activeCount),
+					ContextLabel: "",
+					StatsLabel:   formatProjectSummary(projectCount, totalSessions, activeCount),
 				}
 				if a.inputMode == InputSearch {
 					state.FilteredCount, state.TotalCount = a.projectList.GetFilterStats()
