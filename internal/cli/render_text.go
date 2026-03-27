@@ -29,7 +29,7 @@ func (fw *flushWriter) Write(p []byte) (int, error) {
 func renderTextMode(w *os.File, result CommandResult) {
 	switch r := result.(type) {
 	case StatusResult:
-		renderStatusText(w, r)
+		fmt.Fprint(w, renderStatusText(r))
 	case ProjectListResult:
 		renderProjectListText(w, r)
 	case ProjectDetailResult:
@@ -57,41 +57,49 @@ func renderTextMode(w *os.File, result CommandResult) {
 
 // --- Status ---
 
-func renderStatusText(w io.Writer, r StatusResult) {
-	fmt.Fprintf(w, "Claude Code Environment\n\n")
+func renderStatusText(r StatusResult) string {
+	var buf strings.Builder
 
-	fmt.Fprintf(w, "  Projects:   %d\n", r.Projects)
-	fmt.Fprintf(w, "  Sessions:   %d\n", r.Sessions)
-	fmt.Fprintf(w, "  Resources:  %d\n", r.Resources)
-	fmt.Fprintf(w, "  Total Size: %s\n", formatSize(r.TotalSizeBytes))
+	buf.WriteString("Environment Overview\n")
+	buf.WriteString(strings.Repeat("─", 20) + "\n")
+	fmt.Fprintf(&buf, "Projects: %d  |  Sessions: %d (%d active)",
+		r.Projects, r.Sessions, r.Lifecycle.Active)
 
-	fmt.Fprintf(w, "\nLifecycle\n")
-	fmt.Fprintf(w, "  Active:    %d\n", r.Lifecycle.Active)
-	fmt.Fprintf(w, "  Idle:      %d\n", r.Lifecycle.Idle)
-	fmt.Fprintf(w, "  Completed: %d\n", r.Lifecycle.Completed)
-	fmt.Fprintf(w, "  Stale:     %d\n", r.Lifecycle.Stale)
+	if r.Health != nil && r.Health.EnvironmentScore > 0 {
+		fmt.Fprintf(&buf, "  |  Health: %d/100", r.Health.EnvironmentScore)
+	}
+	buf.WriteString("\n\n")
 
-	if len(r.Issues) > 0 {
-		fmt.Fprintf(w, "\nIssues\n")
-		for _, issue := range r.Issues {
-			fmt.Fprintf(w, "  ! %s (%d)", issue.Type, issue.Count)
-			if issue.Percentage != "" {
-				fmt.Fprintf(w, " [%s]", issue.Percentage)
+	if r.Health == nil {
+		return buf.String()
+	}
+
+	if len(r.Health.ProjectScores) > 0 {
+		buf.WriteString("Lowest Health Projects\n")
+		buf.WriteString(strings.Repeat("─", 22) + "\n")
+		for i, ps := range r.Health.ProjectScores {
+			if i >= 3 {
+				break
 			}
-			fmt.Fprintln(w)
-			fmt.Fprintf(w, "    %s\n", issue.Suggestion)
+			fmt.Fprintf(&buf, "  %d. %-15s Score: %d  |  Stale: %.0f%%  |  Activity: %d\n",
+				i+1, ps.ProjectName, ps.HealthScore,
+				ps.StaleRatio*100, ps.ActivityScore)
 		}
-	} else {
-		fmt.Fprintf(w, "\nNo issues found.\n")
+		buf.WriteString("\n")
 	}
 
-	if len(r.TopProjects) > 0 {
-		fmt.Fprintf(w, "\nTop Projects\n")
-		for _, tp := range r.TopProjects {
-			fmt.Fprintf(w, "  %s  %d sessions (%d active)  %s\n",
-				tp.Name, tp.Sessions, tp.Active, formatSize(int64(tp.SizeBytes)))
+	if len(r.Health.Recommendations) > 0 {
+		buf.WriteString("Recommendations:\n")
+		for _, rec := range r.Health.Recommendations {
+			fmt.Fprintf(&buf, "  - %s\n", rec)
 		}
 	}
+
+	return buf.String()
+}
+
+func (r StatusResult) RenderText() string {
+	return renderStatusText(r)
 }
 
 // --- Projects ---
@@ -420,6 +428,13 @@ func formatNumber(n int) string {
 		result.WriteRune(c)
 	}
 	return result.String()
+}
+
+func formatTokens(tokens int64) string {
+	if tokens < 1000 {
+		return fmt.Sprintf("%d", tokens)
+	}
+	return fmt.Sprintf("%.1fK", float64(tokens)/1000.0)
 }
 
 func truncateText(s string, maxRunes int) string {

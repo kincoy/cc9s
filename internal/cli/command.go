@@ -1,5 +1,7 @@
 package cli
 
+import "github.com/kincoy/cc9s/internal/claudefs"
+
 // OutputMode controls whether a command renders text or JSON.
 type OutputMode int
 
@@ -96,6 +98,7 @@ type StatusResult struct {
 	Lifecycle      LifecycleSummary `json:"lifecycle"`
 	Issues         []StatusIssue    `json:"issues"`
 	TopProjects    []TopProject     `json:"top_projects"`
+	Health         *claudefs.HealthMetrics `json:"health,omitempty"`
 }
 
 func (StatusResult) isCommandResult() {}

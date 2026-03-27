@@ -19,6 +19,7 @@ const (
 	SortBySkillCount
 	SortByAgentCount
 	SortByActivity // default: by most recent activity
+	SortByHealth
 	SortBySize
 )
 
@@ -34,6 +35,8 @@ type ProjectListModel struct {
 	lastWidth     int                // last rendered width, used to match visible sort columns
 	totalSessions int                // total session count
 	activeCount   int                // active session count
+	showHealthColumn bool
+	projectHealth    map[string]int // projectName -> healthScore
 }
 
 // NewProjectListModel creates a new project list Model
@@ -88,7 +91,7 @@ func (m *ProjectListModel) Update(msg tea.Msg) tea.Cmd {
 
 		// Sort shortcuts
 		case "s":
-			m.sortBy = nextProjectSortField(m.sortBy, m.lastWidth)
+			m.sortBy = nextProjectSortField(m.sortBy, m.lastWidth, m.showHealthColumn)
 			m.sortProjects()
 			m.applyFilter()
 		case "S":
@@ -124,7 +127,7 @@ func (m *ProjectListModel) View(width, height int) string {
 		return renderLoadingState(width, height)
 	}
 
-	return renderProjectTable(m.projects, m.cursor, width, height, m.sortBy, m.sortAsc)
+	return renderProjectTable(m.projects, m.cursor, width, height, m.sortBy, m.sortAsc, m.showHealthColumn, m.projectHealth)
 }
 
 // GetStats returns stats info (for AppModel header)
@@ -153,6 +156,8 @@ func (m *ProjectListModel) sortProjects() {
 			less = m.allProjects[i].AgentCount < m.allProjects[j].AgentCount
 		case SortByActivity:
 			less = m.allProjects[i].LastActiveAt.Before(m.allProjects[j].LastActiveAt)
+		case SortByHealth:
+			less = m.projectHealth[m.allProjects[i].Name] < m.projectHealth[m.allProjects[j].Name]
 		case SortBySize:
 			less = m.allProjects[i].TotalSize < m.allProjects[j].TotalSize
 		}
@@ -214,7 +219,7 @@ func (m *ProjectListModel) applyFilter() {
 	m.clampCursor()
 }
 
-func nextProjectSortField(current SortField, width int) SortField {
+func nextProjectSortField(current SortField, width int, showHealthColumn bool) SortField {
 	order := []SortField{
 		SortByName,
 		SortBySessionCount,
@@ -222,6 +227,17 @@ func nextProjectSortField(current SortField, width int) SortField {
 		SortByAgentCount,
 		SortByActivity,
 		SortBySize,
+	}
+	if showHealthColumn {
+		order = []SortField{
+			SortByName,
+			SortBySessionCount,
+			SortBySkillCount,
+			SortByAgentCount,
+			SortByActivity,
+			SortByHealth,
+			SortBySize,
+		}
 	}
 	if width >= 140 {
 		order = []SortField{
@@ -231,8 +247,11 @@ func nextProjectSortField(current SortField, width int) SortField {
 			SortBySkillCount,
 			SortByAgentCount,
 			SortByActivity,
-			SortBySize,
 		}
+		if showHealthColumn {
+			order = append(order, SortByHealth)
+		}
+		order = append(order, SortBySize)
 	}
 
 	for i, field := range order {
@@ -246,4 +265,16 @@ func nextProjectSortField(current SortField, width int) SortField {
 
 func projectLocalSkillTotal(project claudefs.Project) int {
 	return project.SkillCount + project.CommandCount
+}
+
+func (m *ProjectListModel) loadProjectHealth(homeDir string) {
+	health, err := claudefs.ComputeHealthMetrics(homeDir)
+	if err != nil {
+		return
+	}
+
+	m.projectHealth = make(map[string]int)
+	for _, ps := range health.ProjectScores {
+		m.projectHealth[ps.ProjectName] = ps.HealthScore
+	}
 }

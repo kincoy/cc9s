@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -49,6 +50,7 @@ type AppModel struct {
 	ready    bool
 	showHelp bool
 	quitting bool
+	homeDir  string
 
 	currentResource   ResourceType
 	inputMode         InputMode
@@ -81,10 +83,13 @@ type AppModel struct {
 	agentDetailView      *AgentDetailViewModel
 	showingLog           bool
 	logView              *LogViewModel
+
 }
 
 // NewAppModel creates a new application Model
 func NewAppModel() *AppModel {
+	homeDir, _ := os.UserHomeDir()
+
 	si := textinput.New()
 	si.Prompt = "/"
 	si.Placeholder = "search..."
@@ -97,6 +102,7 @@ func NewAppModel() *AppModel {
 
 	return &AppModel{
 		currentResource:  ResourceProjects,
+		homeDir:          homeDir,
 		projectList:      NewProjectListModel(),
 		resourceRegistry: newResourceRegistry(),
 		searchInput:      si,
@@ -538,10 +544,11 @@ func (a *AppModel) currentTargetContext(includeSelectedProject bool) Context {
 // renderHeader renders the header (context-aware)
 func (a *AppModel) renderHeader() string {
 	state := a.currentHeaderState()
+	resourceLabel := a.currentResourceDescriptor().DisplayName
 	if state.HasFilteredState {
-		return renderHeaderWithFilter(a.width, state.ContextLabel, state.StatsLabel, state.FilteredCount, state.TotalCount)
+		return renderHeaderWithFilter(a.width, resourceLabel, state.ContextLabel, state.StatsLabel, state.FilteredCount, state.TotalCount)
 	}
-	return renderHeader(a.width, state.ContextLabel, state.StatsLabel)
+	return renderHeader(a.width, resourceLabel, state.ContextLabel, state.StatsLabel)
 }
 
 func (a *AppModel) currentHeaderState() ResourceHeaderState {
@@ -553,8 +560,8 @@ func (a *AppModel) currentHeaderState() ResourceHeaderState {
 	}
 
 	return ResourceHeaderState{
-		ContextLabel: "0 projects",
-		StatsLabel:   "0 sessions / 0 active",
+		ContextLabel: "",
+		StatsLabel:   "0 projects / 0 sessions / 0 active",
 	}
 }
 
@@ -916,6 +923,9 @@ func (a *AppModel) commandCompletionCandidates(input string, excludeExact bool) 
 	if len(segments) == 1 {
 		prefix := segments[0]
 		commands := append(a.resourceRegistry.CompletionCandidates(prefix), "context")
+		if a.currentResource == ResourceProjects {
+			commands = append(commands, "health")
+		}
 		if a.currentResource == ResourceSessions {
 			commands = append(commands, "cleanup")
 		}
@@ -1020,6 +1030,14 @@ func (a *AppModel) executeCommand(cmdStr string) tea.Cmd {
 			return func() tea.Msg { return ToggleCleanupHintsMsg{} }
 		}
 		return nil
+	case "health":
+		if a.currentResource == ResourceProjects && a.projectList != nil {
+			a.projectList.showHealthColumn = !a.projectList.showHealthColumn
+			if a.projectList.showHealthColumn && len(a.projectList.projectHealth) == 0 {
+				a.projectList.loadProjectHealth(a.homeDir)
+			}
+		}
+		return nil
 	default:
 		if descriptor, ok := a.resourceRegistry.FindByCommand(parts[0]); ok {
 			return func() tea.Msg { return SwitchResourceMsg{Resource: descriptor.Resource} }
@@ -1071,12 +1089,8 @@ func formatLifecycleSummary(width int, summary claudefs.LifecycleSummary) string
 	return fmt.Sprintf("%d sessions / %d active / %d idle / %d completed / %d stale", summary.Total, summary.Active, summary.Idle, summary.Completed, summary.Stale)
 }
 
-func formatProjectContextLabel(projectCount int) string {
-	return fmt.Sprintf("%d projects", projectCount)
-}
-
-func formatProjectSummary(totalSessions, activeCount int) string {
-	return fmt.Sprintf("%d sessions / %d active", totalSessions, activeCount)
+func formatProjectSummary(projectCount, totalSessions, activeCount int) string {
+	return fmt.Sprintf("%d projects / %d sessions / %d active", projectCount, totalSessions, activeCount)
 }
 
 func formatResourceContextLabel(allLabel string, ctx Context) string {
