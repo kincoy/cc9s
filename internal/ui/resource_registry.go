@@ -42,6 +42,7 @@ func newResourceRegistry() *ResourceRegistry {
 					Title: "Project Operations",
 					Lines: []KeyHint{
 						{Key: ":projects", Label: "    Switch to projects resource"},
+						{Key: ":health", Label: "      Toggle HEALTH column"},
 						{Key: "Enter", Label: "     Open selected project sessions"},
 						{Key: "d", Label: "         View selected project details"},
 						{Key: "/", Label: "         Search projects by name or path"},
@@ -127,6 +128,7 @@ func newResourceRegistry() *ResourceRegistry {
 					Title: "Session Operations",
 					Lines: []KeyHint{
 						{Key: ":sessions", Label: "    Switch to sessions resource"},
+						{Key: ":cleanup", Label: "   Toggle cleanup recommendations"},
 						{Key: "Enter", Label: "     Resume selected session"},
 						{Key: "d", Label: "         View session details"},
 						{Key: "l", Label: "         View session log"},
