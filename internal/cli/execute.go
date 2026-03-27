@@ -494,13 +494,17 @@ func executeSessionsCleanup(cmd *Command) (CommandResult, error) {
 				}
 			}
 
+			assessment := claudefs.QuickAssessSession(s)
 			ageHours := now.Sub(s.LastActiveAt).Hours()
 			matches = append(matches, CleanupSessionMatch{
-				ID:        s.ID,
-				Project:   project.Name,
-				State:     string(s.Lifecycle.State),
-				AgeHours:  ageHours,
-				UpdatedAt: formatTimeRFC3339(s.LastActiveAt),
+				ID:             s.ID,
+				Project:        project.Name,
+				State:          string(s.Lifecycle.State),
+				AgeHours:       ageHours,
+				UpdatedAt:      formatTimeRFC3339(s.LastActiveAt),
+				Recommendation: string(assessment.Recommendation),
+				Score:          assessment.Score,
+				Reasons:        assessment.Reasons,
 			})
 			totalSize += s.FileSize
 			projectMatchCount++
@@ -520,6 +524,18 @@ func executeSessionsCleanup(cmd *Command) (CommandResult, error) {
 		})
 	}
 
+	var deleteCount, maybeCount, keepCount int
+	for _, match := range matches {
+		switch claudefs.CleanupRecommendation(match.Recommendation) {
+		case claudefs.RecommendDelete:
+			deleteCount++
+		case claudefs.RecommendMaybe:
+			maybeCount++
+		case claudefs.RecommendKeep:
+			keepCount++
+		}
+	}
+
 	return CleanupResult{
 		DryRun: true,
 		Filters: CleanupFilters{
@@ -531,6 +547,9 @@ func executeSessionsCleanup(cmd *Command) (CommandResult, error) {
 			MatchedSessions: len(matches),
 			MatchedProjects: len(projects),
 			TotalSizeBytes:  totalSize,
+			DeleteCount:     deleteCount,
+			MaybeCount:      maybeCount,
+			KeepCount:       keepCount,
 		},
 		Projects: projects,
 		Sessions: matches,

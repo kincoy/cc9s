@@ -23,4 +23,12 @@ func TestRenderHelpUsesRegistryCommandNamesAndActiveCapabilities(t *testing.T) {
 	if strings.Contains(output, "Switch to all projects") {
 		t.Fatal("expected projects help to omit active all-context shortcut guidance")
 	}
+
+	output = renderHelp(120, 40, registry, registry.MustGet(ResourceSessions))
+	if !strings.Contains(output, ":cleanup") {
+		t.Fatal("expected sessions help to include cleanup command guidance")
+	}
+	if !strings.Contains(output, "Toggle cleanup recommendations") {
+		t.Fatal("expected sessions help to describe cleanup recommendations")
+	}
 }

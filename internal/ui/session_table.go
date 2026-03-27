@@ -10,7 +10,7 @@ import (
 )
 
 // renderSessionTable renders the session table (Approach A: manually drawn borders, title embedded in top border)
-func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height int, selectedRows map[int]struct{}, showProjectColumn bool, sortBy SessionSortField, sortAsc bool, contextLabel string) string {
+func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height int, selectedRows map[int]struct{}, showProjectColumn bool, sortBy SessionSortField, sortAsc bool, contextLabel string, showCleanupHints bool) string {
 	if len(sessions) == 0 {
 		return ""
 	}
@@ -50,6 +50,7 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 
 	idWidth := 12
 	statusWidth := 13
+	recommendWidth := 10
 	lastActiveWidth := 14
 	eventsWidth := 8
 	sizeWidth := 10
@@ -58,12 +59,18 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 	if showProjectColumn {
 		colCount++
 	}
+	if showCleanupHints {
+		colCount++
+	}
 	if showEventsAndSize {
 		colCount += 2
 	}
 	sepCount := colCount - 1
 
 	fixedWidth := projectWidth + idWidth + statusWidth + lastActiveWidth
+	if showCleanupHints {
+		fixedWidth += recommendWidth
+	}
 	if showEventsAndSize {
 		fixedWidth += eventsWidth + sizeWidth
 	}
@@ -89,6 +96,7 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 		{"SESSION ID", idWidth, lipgloss.Left, SortBySessionID, true},
 		{"SUMMARY", summaryWidth, lipgloss.Left, -1, true},
 		{"STATUS", statusWidth, lipgloss.Left, -1, true},
+		{"RECOMMEND", recommendWidth, lipgloss.Left, -1, showCleanupHints},
 		{"LAST ACTIVE", lastActiveWidth, lipgloss.Right, SortBySessionActivity, true},
 		{"EVENTS", eventsWidth, lipgloss.Right, SortByEventCount, showEventsAndSize},
 		{"SIZE", sizeWidth, lipgloss.Right, SortBySessionSize, showEventsAndSize},
@@ -142,6 +150,7 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 
 		statusText := styles.LifecycleStatusText(gs.Session.Lifecycle.State)
 		statusStyle := styles.LifecycleStatusStyle(gs.Session.Lifecycle.State)
+		assessment := claudefs.QuickAssessSession(gs.Session)
 
 		rowSep := rowStyle.Render("  ")
 
@@ -156,17 +165,36 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 				rowStyle.Width(projectWidth).Render(gs.ProjectName), rowSep,
 				rowStyle.Width(idWidth).Render(sessionID), rowSep,
 				rowStyle.Width(summaryWidth).Render(truncateSummary(summaryText, summaryWidth)), rowSep,
-				statusStyle.Inherit(rowStyle).Width(statusWidth).Render(statusText), rowSep,
-				rowStyle.Width(lastActiveWidth).Align(lipgloss.Right).Render(claudefs.FormatTimeAgo(gs.Session.LastActiveAt)),
+				statusStyle.Inherit(rowStyle).Width(statusWidth).Render(statusText),
 			)
 		} else {
 			rowParts = append(rowParts,
 				rowStyle.Width(idWidth).Render(sessionID), rowSep,
 				rowStyle.Width(summaryWidth).Render(truncateSummary(summaryText, summaryWidth)), rowSep,
-				statusStyle.Inherit(rowStyle).Width(statusWidth).Render(statusText), rowSep,
-				rowStyle.Width(lastActiveWidth).Align(lipgloss.Right).Render(claudefs.FormatTimeAgo(gs.Session.LastActiveAt)),
+				statusStyle.Inherit(rowStyle).Width(statusWidth).Render(statusText),
 			)
 		}
+
+		if showCleanupHints {
+			var recStyle lipgloss.Style
+			switch assessment.Recommendation {
+			case claudefs.RecommendDelete:
+				recStyle = rowStyle.Width(recommendWidth).Foreground(styles.ColorError)
+			case claudefs.RecommendMaybe:
+				recStyle = rowStyle.Width(recommendWidth).Foreground(styles.ColorWarning)
+			default:
+				recStyle = rowStyle.Width(recommendWidth).Foreground(styles.ColorActive)
+			}
+			rowParts = append(rowParts,
+				rowSep,
+				recStyle.Render(string(assessment.Recommendation)),
+			)
+		}
+
+		rowParts = append(rowParts,
+			rowSep,
+			rowStyle.Width(lastActiveWidth).Align(lipgloss.Right).Render(claudefs.FormatTimeAgo(gs.Session.LastActiveAt)),
+		)
 
 		if showEventsAndSize {
 			rowParts = append(rowParts,

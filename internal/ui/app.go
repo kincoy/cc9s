@@ -295,6 +295,12 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, setContext(a, msg.Context)
 		}
 
+	case ToggleCleanupHintsMsg:
+		if a.sessionList != nil {
+			a.sessionList.showCleanupHints = !a.sessionList.showCleanupHints
+		}
+		return a, nil
+
 	case DeleteSessionsMsg:
 		// Execute deletion asynchronously
 		return a, deleteSessionsCmd(msg.Targets)
@@ -910,6 +916,9 @@ func (a *AppModel) commandCompletionCandidates(input string, excludeExact bool) 
 	if len(segments) == 1 {
 		prefix := segments[0]
 		commands := append(a.resourceRegistry.CompletionCandidates(prefix), "context")
+		if a.currentResource == ResourceSessions {
+			commands = append(commands, "cleanup")
+		}
 		candidates := make([]string, 0, len(commands))
 		for _, cmd := range commands {
 			if !strings.HasPrefix(cmd, prefix) {
@@ -1006,6 +1015,11 @@ func (a *AppModel) executeCommand(cmdStr string) tea.Cmd {
 		return func() tea.Msg {
 			return SwitchContextMsg{Context: Context{Type: ContextProject, Value: parts[1]}}
 		}
+	case "cleanup":
+		if a.currentResource == ResourceSessions {
+			return func() tea.Msg { return ToggleCleanupHintsMsg{} }
+		}
+		return nil
 	default:
 		if descriptor, ok := a.resourceRegistry.FindByCommand(parts[0]); ok {
 			return func() tea.Msg { return SwitchResourceMsg{Resource: descriptor.Resource} }

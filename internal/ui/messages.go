@@ -140,3 +140,6 @@ type SessionsDeletedMsg struct {
 	Deleted int
 	Errs    []error
 }
+
+// ToggleCleanupHintsMsg toggles the cleanup recommendation column in session view.
+type ToggleCleanupHintsMsg struct{}
