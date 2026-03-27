@@ -54,6 +54,13 @@ func renderHelp(width, height int, registry *ResourceRegistry, active ResourceDe
 	}
 	lines = append(lines,
 		"  "+styles.FooterKeyStyle.Render(":context")+styles.FooterStyle.Render("   Switch context (all / project name)"),
+	)
+	if active.Resource == ResourceSessions {
+		lines = append(lines,
+			"  "+styles.FooterKeyStyle.Render(":cleanup")+styles.FooterStyle.Render("   Toggle cleanup recommendations"),
+		)
+	}
+	lines = append(lines,
 		"  "+styles.FooterKeyStyle.Render("Tab")+styles.FooterStyle.Render("       Auto-complete commands"),
 		"",
 		"  "+styles.HeaderStyle.Render("Dialog"),

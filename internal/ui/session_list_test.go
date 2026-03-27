@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/kincoy/cc9s/internal/claudefs"
 )
@@ -153,5 +155,96 @@ func TestSessionListReloadFallsBackToPreviousIndex(t *testing.T) {
 
 	if model.cursor != 1 {
 		t.Fatalf("cursor = %d, want 1 after clamp", model.cursor)
+	}
+}
+
+func TestSessionListViewShowsCleanupHintsColumn(t *testing.T) {
+	model := &SessionListModel{
+		context: Context{Type: ContextAll},
+		sessions: []claudefs.GlobalSession{
+			{
+				ProjectName: "demo",
+				Session: claudefs.Session{
+					ID:           "stale-1",
+					Summary:      "tiny stale session",
+					LastActiveAt: time.Now().Add(-72 * time.Hour),
+					EventCount:   2,
+					FileSize:     500,
+					Lifecycle: claudefs.SessionLifecycleSnapshot{
+						State: claudefs.SessionLifecycleStale,
+					},
+				},
+			},
+		},
+		contextSessions: []claudefs.GlobalSession{
+			{
+				ProjectName: "demo",
+				Session: claudefs.Session{
+					ID:           "stale-1",
+					Summary:      "tiny stale session",
+					LastActiveAt: time.Now().Add(-72 * time.Hour),
+					EventCount:   2,
+					FileSize:     500,
+					Lifecycle: claudefs.SessionLifecycleSnapshot{
+						State: claudefs.SessionLifecycleStale,
+					},
+				},
+			},
+		},
+	}
+
+	model.SetCleanupHints(true)
+	out := model.View(140, 12)
+
+	for _, want := range []string{"RECOMMEND", "Delete"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("cleanup hints output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestSessionListRecommendationSearch(t *testing.T) {
+	model := &SessionListModel{}
+	sessions := []claudefs.GlobalSession{
+		{
+			ProjectName: "demo",
+			Session: claudefs.Session{
+				ID:           "s-001",
+				ProjectPath:  "/tmp/demo",
+				LastActiveAt: time.Now().Add(-72 * time.Hour),
+				EventCount:   2,
+				FileSize:     500,
+				Summary:      "hi",
+				Lifecycle: claudefs.SessionLifecycleSnapshot{
+					State: claudefs.SessionLifecycleStale,
+				},
+			},
+		},
+		{
+			ProjectName: "demo",
+			Session: claudefs.Session{
+				ID:           "s-002",
+				ProjectPath:  "/tmp/demo",
+				LastActiveAt: time.Now().Add(-2 * time.Hour),
+				EventCount:   300,
+				FileSize:     200000,
+				Summary:      "implement the full authentication system with JWT tokens",
+				Lifecycle: claudefs.SessionLifecycleSnapshot{
+					State: claudefs.SessionLifecycleCompleted,
+				},
+			},
+		},
+	}
+
+	model.contextSessions = sessions
+
+	model.ApplyFilter("del")
+	if len(model.sessions) != 1 || model.sessions[0].Session.ID != "s-001" {
+		t.Fatalf("delete recommendation search mismatch: %+v", model.sessions)
+	}
+
+	model.ApplyFilter("keep")
+	if len(model.sessions) != 1 || model.sessions[0].Session.ID != "s-002" {
+		t.Fatalf("keep recommendation search mismatch: %+v", model.sessions)
 	}
 }

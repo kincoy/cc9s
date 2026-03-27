@@ -382,6 +382,58 @@ func TestCurrentHeaderStateUsesDescriptorForSkillProjectContext(t *testing.T) {
 	}
 }
 
+func TestCleanupCommandTogglesSessionCleanupHints(t *testing.T) {
+	app := NewAppModel()
+	app.setActiveResource(ResourceSessions)
+	app.sessionList = NewSessionListModel()
+	app.sessionList.loading = false
+
+	cmd := app.executeCommand("cleanup")
+	if cmd == nil {
+		t.Fatal("expected cleanup command to emit a toggle message")
+	}
+
+	msg := cmd()
+	if _, ok := msg.(ToggleCleanupHintsMsg); !ok {
+		t.Fatalf("expected ToggleCleanupHintsMsg, got %T", msg)
+	}
+
+	model, nextCmd := app.Update(msg)
+	if nextCmd != nil {
+		t.Fatalf("expected no follow-up command when toggling cleanup hints, got %v", nextCmd)
+	}
+
+	appModel := model.(*AppModel)
+	if !appModel.sessionList.showCleanupHints {
+		t.Fatal("expected cleanup hints to be enabled")
+	}
+}
+
+func TestCleanupCommandCompletionOnlyInSessions(t *testing.T) {
+	app := NewAppModel()
+	app.setActiveResource(ResourceSessions)
+
+	candidates, _, _ := app.commandCompletionCandidates("cl", false)
+	found := false
+	for _, candidate := range candidates {
+		if candidate == "cleanup" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected cleanup completion in sessions, got %#v", candidates)
+	}
+
+	app.setActiveResource(ResourceProjects)
+	candidates, _, _ = app.commandCompletionCandidates("cl", false)
+	for _, candidate := range candidates {
+		if candidate == "cleanup" {
+			t.Fatalf("cleanup should not complete outside sessions, got %#v", candidates)
+		}
+	}
+}
+
 func TestCurrentHeaderStateUsesDescriptorForAgentLoadError(t *testing.T) {
 	app := NewAppModel()
 	app.setActiveResource(ResourceAgents)

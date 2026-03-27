@@ -94,3 +94,19 @@ type SessionHealth struct {
 	IsReliable bool
 	Problem    string
 }
+
+// CleanupRecommendation indicates how strongly a session should be cleaned up.
+type CleanupRecommendation string
+
+const (
+	RecommendDelete CleanupRecommendation = "Delete"
+	RecommendMaybe  CleanupRecommendation = "Maybe"
+	RecommendKeep   CleanupRecommendation = "Keep"
+)
+
+// SessionAssessment is the value assessment result for a session.
+type SessionAssessment struct {
+	Score          int
+	Recommendation CleanupRecommendation
+	Reasons        []string
+}

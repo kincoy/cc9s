@@ -288,43 +288,89 @@ func renderCleanupText(w io.Writer, r CleanupResult) {
 	fmt.Fprintln(w, "Session Cleanup Preview (dry-run — no data was modified)")
 	fmt.Fprintln(w)
 
-	fmt.Fprintf(w, "Filters: state=%s", r.Filters.State)
-	if r.Filters.Project != "" {
-		fmt.Fprintf(w, ", project=%s", r.Filters.Project)
-	}
+	fmt.Fprintf(w, "  Filters:  state=%s", r.Filters.State)
 	if r.Filters.OlderThan != "" {
-		fmt.Fprintf(w, ", older_than=%s", r.Filters.OlderThan)
+		fmt.Fprintf(w, "  older-than=%s", r.Filters.OlderThan)
+	}
+	if r.Filters.Project != "" {
+		fmt.Fprintf(w, "  project=%s", r.Filters.Project)
 	}
 	fmt.Fprintln(w)
 
-	fmt.Fprintf(w, "\nSummary\n")
-	fmt.Fprintf(w, "  Matched Sessions: %d\n", r.Summary.MatchedSessions)
-	fmt.Fprintf(w, "  Matched Projects: %d\n", r.Summary.MatchedProjects)
-	fmt.Fprintf(w, "  Total Size:       %s\n", formatSize(r.Summary.TotalSizeBytes))
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Summary")
+	fmt.Fprintf(w, "  Matched:  %d sessions across %d projects (%s)\n",
+		r.Summary.MatchedSessions, r.Summary.MatchedProjects, formatSize(r.Summary.TotalSizeBytes))
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Recommendations")
+	if r.Summary.DeleteCount > 0 {
+		fmt.Fprintf(w, "  Delete:   %d sessions (safe to remove)\n", r.Summary.DeleteCount)
+	}
+	if r.Summary.MaybeCount > 0 {
+		fmt.Fprintf(w, "  Review:   %d sessions (check before deleting)\n", r.Summary.MaybeCount)
+	}
+	if r.Summary.KeepCount > 0 {
+		fmt.Fprintf(w, "  Keep:     %d sessions (valuable content)\n", r.Summary.KeepCount)
+	}
+	if strings.EqualFold(r.Filters.State, "stale") {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Tip")
+		fmt.Fprintln(w, "  Default cleanup targets stale sessions, so this view usually only shows Delete.")
+		fmt.Fprintln(w, "  Use \"--state completed\" to see Delete / Review / Keep recommendations.")
+	}
 
 	if len(r.Projects) > 0 {
-		fmt.Fprintf(w, "\nProjects\n")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Projects")
 		for _, p := range r.Projects {
-			fmt.Fprintf(w, "  %s  %d sessions\n", p.Name, p.SessionCount)
+			fmt.Fprintf(w, "  %-30s %d sessions\n", p.Name, p.SessionCount)
 		}
 	}
 
-	// In text mode, show up to 10 sessions as a preview
-	fmt.Fprintf(w, "\nSessions (preview)\n")
-	limit := len(r.Sessions)
+	fmt.Fprintln(w)
+	printSessionGroup(w, r.Sessions, "Delete", "Recommended for deletion")
+	printSessionGroup(w, r.Sessions, "Maybe", "Review before deleting")
+	printSessionGroup(w, r.Sessions, "Keep", "Recommended to keep")
+
+	if len(r.Sessions) > 30 {
+		fmt.Fprintf(w, "  ... showing top 30 of %d sessions (use --json for full list)\n", len(r.Sessions))
+	}
+}
+
+func printSessionGroup(w io.Writer, sessions []CleanupSessionMatch, recommendation string, header string) {
+	var group []CleanupSessionMatch
+	for _, s := range sessions {
+		if s.Recommendation == recommendation {
+			group = append(group, s)
+		}
+	}
+	if len(group) == 0 {
+		return
+	}
+
+	fmt.Fprintf(w, "%s (%d)\n", header, len(group))
+	limit := len(group)
 	if limit > 10 {
 		limit = 10
 	}
-	for i := 0; i < limit; i++ {
-		s := r.Sessions[i]
-		fmt.Fprintf(w, "  %s  %s  %s  %s\n", truncateText(s.ID, 16), s.Project, s.State, s.UpdatedAt)
+	for _, s := range group[:limit] {
+		reason := ""
+		if len(s.Reasons) > 0 {
+			reason = s.Reasons[0]
+		}
+		fmt.Fprintf(w, "  %-12s %-20s %-10s  %s\n", s.ID[:minInt(12, len(s.ID))], s.Project, s.State, reason)
 	}
-	if len(r.Sessions) > 10 {
-		fmt.Fprintf(w, "  ... and %d more sessions (use --json for full list)\n", len(r.Sessions)-10)
+	if len(group) > 10 {
+		fmt.Fprintf(w, "  ... and %d more\n", len(group)-10)
 	}
-
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Preview only — no data was modified.")
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // --- Formatting helpers ---

@@ -348,6 +348,9 @@ type CleanupSummary struct {
 	MatchedSessions int   `json:"matched_sessions"`
 	MatchedProjects int   `json:"matched_projects"`
 	TotalSizeBytes  int64 `json:"total_size_bytes"`
+	DeleteCount     int   `json:"delete_count"`
+	MaybeCount      int   `json:"maybe_count"`
+	KeepCount       int   `json:"keep_count"`
 }
 
 // CleanupProjectGroup is one project group in the cleanup preview.
@@ -358,9 +361,12 @@ type CleanupProjectGroup struct {
 
 // CleanupSessionMatch is one matched session in a cleanup preview.
 type CleanupSessionMatch struct {
-	ID        string  `json:"id"`
-	Project   string  `json:"project"`
-	State     string  `json:"state"`
-	AgeHours  float64 `json:"age_hours"`
-	UpdatedAt string  `json:"updated_at"`
+	ID             string   `json:"id"`
+	Project        string   `json:"project"`
+	State          string   `json:"state"`
+	AgeHours       float64  `json:"age_hours"`
+	UpdatedAt      string   `json:"updated_at"`
+	Recommendation string   `json:"recommendation"`
+	Score          int      `json:"score"`
+	Reasons        []string `json:"reasons"`
 }

@@ -37,6 +37,7 @@ type SessionListModel struct {
 	sortAsc          bool
 	restoreSessionID string
 	restoreCursor    int
+	showCleanupHints bool
 }
 
 // sessionsLoadedMsg session data loaded message
@@ -83,6 +84,11 @@ func (m *SessionListModel) SetContext(ctx Context) tea.Cmd {
 // ShowProjectColumn whether to show the PROJECT column
 func (m *SessionListModel) ShowProjectColumn() bool {
 	return m.context.Type == ContextAll
+}
+
+// SetCleanupHints enables or disables the cleanup recommendation column.
+func (m *SessionListModel) SetCleanupHints(show bool) {
+	m.showCleanupHints = show
 }
 
 func (m *SessionListModel) Init() tea.Cmd {
@@ -228,7 +234,12 @@ func (m *SessionListModel) View(width, height int) string {
 		contextLabel = m.context.Value
 	}
 
-	return renderSessionTable(m.sessions, m.cursor, width, height, m.selectedRows, m.ShowProjectColumn(), m.sortBy, m.sortAsc, contextLabel)
+	return renderSessionTable(
+		m.sessions, m.cursor, width, height,
+		m.selectedRows, m.ShowProjectColumn(),
+		m.sortBy, m.sortAsc, contextLabel,
+		m.showCleanupHints,
+	)
 }
 
 // Reload reloads all session data
@@ -326,6 +337,20 @@ func queryLooksLikeLifecycleState(query string) bool {
 	return false
 }
 
+func queryLooksLikeRecommendation(query string) bool {
+	query = strings.ToLower(strings.TrimSpace(query))
+	for _, prefix := range []string{"delete", "maybe", "keep", "del", "rem"} {
+		if strings.HasPrefix(prefix, query) {
+			return true
+		}
+	}
+	return false
+}
+
+func recommendationMatchesQuery(rec claudefs.CleanupRecommendation, query string) bool {
+	return strings.HasPrefix(strings.ToLower(string(rec)), strings.ToLower(strings.TrimSpace(query)))
+}
+
 // ApplyFilter sets search query and re-filters
 func (m *SessionListModel) ApplyFilter(query string) {
 	oldQuery := m.filterQuery
@@ -342,6 +367,11 @@ func (m *SessionListModel) matchesFilter(gs claudefs.GlobalSession, q string) bo
 
 	if queryLooksLikeLifecycleState(q) {
 		return claudefs.LifecycleStateMatchesQuery(s.Lifecycle.State, q)
+	}
+
+	if queryLooksLikeRecommendation(q) {
+		assessment := claudefs.QuickAssessSession(s)
+		return recommendationMatchesQuery(assessment.Recommendation, q)
 	}
 
 	if strings.Contains(strings.ToLower(s.ID), q) {

@@ -207,6 +207,28 @@ Top Projects
 cc9s status --json
 ```
 
+### 智能清理建议
+
+`cc9s sessions cleanup --dry-run` 现在会对会话内容价值打分，并按 recommendation 分层展示清理建议：
+
+```text
+cc9s sessions cleanup --dry-run
+
+Session Cleanup Preview (dry-run — no data was modified)
+
+  Filters:  state=stale
+
+Summary
+  Matched:  16 sessions across 5 projects (4.2 MB)
+
+Recommendations
+  Delete:   12 sessions (safe to remove)
+  Review:   3 sessions (check before deleting)
+  Keep:     1 sessions (valuable content)
+```
+
+每个会话都会基于对话深度、工具使用、token 投入和内容体量做评估。使用 `--json` 可以拿到完整的 recommendation、score 和 reasons 字段。
+
 ### 完整帮助
 
 CLI 的完整命令面，直接以二进制帮助输出为准：
@@ -223,7 +245,7 @@ Usage:
   cc9s projects inspect <name>  Project details (match by name or path)
   cc9s sessions list        List sessions across all projects
   cc9s sessions inspect <id>   Session details (exact ID from list output)
-  cc9s sessions cleanup --dry-run  Preview stale/old sessions (read-only)
+  cc9s sessions cleanup --dry-run  Preview smart cleanup recommendations (read-only)
   cc9s skills list          List skills and commands
   cc9s agents list          List agents
   cc9s agents inspect <name>   Agent details (match by name or path)
@@ -274,7 +296,7 @@ Common patterns:
   cc9s status --json                        Machine-readable overview
   cc9s sessions list --state active --json  Find active sessions, get full IDs
   cc9s sessions inspect <id> --json         Full session details (model, tokens, lifecycle)
-  cc9s sessions cleanup --dry-run           Preview what would be cleaned up
+  cc9s sessions cleanup --dry-run           Preview smart cleanup recommendations
   cc9s projects inspect cc9s               Inspect a specific project
   cc9s skills list --project cc9s --json    Skills for one project
 ```
@@ -320,6 +342,7 @@ Common patterns:
 | `:projects` | 显示项目列表 |
 | `:context all` | 将当前资源切换到全部项目上下文 |
 | `:context <名称>` | 按项目上下文过滤当前资源 |
+| `:cleanup` | 在 sessions 视图中切换 RECOMMEND 清理建议列 |
 | `:q` | 退出 |
 
 ## 工作原理

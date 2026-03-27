@@ -207,6 +207,28 @@ Need the same snapshot for tooling or an AI agent?
 cc9s status --json
 ```
 
+### Smart Cleanup
+
+`cc9s sessions cleanup --dry-run` now scores session value and groups cleanup suggestions into actionable recommendation tiers:
+
+```text
+cc9s sessions cleanup --dry-run
+
+Session Cleanup Preview (dry-run — no data was modified)
+
+  Filters:  state=stale
+
+Summary
+  Matched:  16 sessions across 5 projects (4.2 MB)
+
+Recommendations
+  Delete:   12 sessions (safe to remove)
+  Review:   3 sessions (check before deleting)
+  Keep:     1 sessions (valuable content)
+```
+
+Each session is assessed from conversation depth, tool usage, token investment, and content volume. Use `--json` for full recommendation, score, and reason details.
+
 ### Full Help
 
 The CLI surface is best viewed directly from the binary:
@@ -223,7 +245,7 @@ Usage:
   cc9s projects inspect <name>  Project details (match by name or path)
   cc9s sessions list        List sessions across all projects
   cc9s sessions inspect <id>   Session details (exact ID from list output)
-  cc9s sessions cleanup --dry-run  Preview stale/old sessions (read-only)
+  cc9s sessions cleanup --dry-run  Preview smart cleanup recommendations (read-only)
   cc9s skills list          List skills and commands
   cc9s agents list          List agents
   cc9s agents inspect <name>   Agent details (match by name or path)
@@ -274,7 +296,7 @@ Common patterns:
   cc9s status --json                        Machine-readable overview
   cc9s sessions list --state active --json  Find active sessions, get full IDs
   cc9s sessions inspect <id> --json         Full session details (model, tokens, lifecycle)
-  cc9s sessions cleanup --dry-run           Preview what would be cleaned up
+  cc9s sessions cleanup --dry-run           Preview smart cleanup recommendations
   cc9s projects inspect cc9s               Inspect a specific project
   cc9s skills list --project cc9s --json    Skills for one project
 ```
@@ -320,6 +342,7 @@ Type `:` to enter command mode. Press `Tab` to autocomplete.
 | `:projects` | Show projects |
 | `:context all` | Switch current resource to all-project context |
 | `:context <name>` | Filter current resource by project context |
+| `:cleanup` | Toggle the RECOMMEND cleanup column in sessions view |
 | `:q` | Quit |
 
 ## How It Works
