@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -15,12 +16,12 @@ import (
 type LogViewModel struct {
 	session    claudefs.Session      // session object
 	logEntries []claudefs.LogEntry   // log entries (organized by turn)
-	loading    bool              // whether loading is in progress
-	offset     int               // current offset
-	hasMore    bool              // whether more log entries exist
-	cursor     int               // current scroll position (first visible turn)
-	width      int               // view width
-	height     int               // view height
+	loading    bool                  // whether loading is in progress
+	offset     int                   // current offset
+	hasMore    bool                  // whether more log entries exist
+	viewport   viewport.Model       // viewport for scrolling
+	width      int                   // view width
+	height     int                   // view height
 }
 
 // NewLogViewModel creates a new log view Model
@@ -29,12 +30,15 @@ func NewLogViewModel(session claudefs.Session) *LogViewModel {
 		session: session,
 		loading: true,
 		offset:  0,
-		cursor:  0,
 	}
 }
 
 func (m *LogViewModel) Init() tea.Cmd {
-	return loadSessionLogCmd(m.session.ID, 0, 100)
+	m.viewport = NewViewportWithSize(80, 20)
+	return tea.Batch(
+		m.viewport.Init(),
+		loadSessionLogCmd(m.session.ID, 0, 100),
+	)
 }
 
 // loadSessionLogCmd asynchronously loads session log
@@ -56,28 +60,43 @@ func (m *LogViewModel) Update(msg tea.Msg) tea.Cmd {
 			m.logEntries = msg.entries
 			m.hasMore = len(msg.entries) < msg.total
 		}
+		m.updateViewportContent()
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		// Account for padding (1 top + 1 bottom = 2 vertical, 2 left + 2 right = 4 horizontal)
+		vpWidth := msg.Width - 4
+		vpHeight := msg.Height - 2
+		if vpWidth < 1 {
+			vpWidth = 1
+		}
+		if vpHeight < 1 {
+			vpHeight = 1
+		}
+		m.viewport.SetWidth(vpWidth)
+		m.viewport.SetHeight(vpHeight)
+		m.updateViewportContent()
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		// Scroll shortcuts
 		case "j", "down":
-			if m.cursor < len(m.logEntries)-1 {
-				m.cursor++
-			}
+			m.viewport.ScrollDown(1)
 		case "k", "up":
-			if m.cursor > 0 {
-				m.cursor--
-			}
+			m.viewport.ScrollUp(1)
 		case "G":
-			if len(m.logEntries) > 0 {
-				m.cursor = len(m.logEntries) - 1
-			}
+			m.viewport.GotoBottom()
 		case "g":
-			m.cursor = 0
+			m.viewport.GotoTop()
+		case "pgup":
+			m.viewport.PageUp()
+		case "pgdown":
+			m.viewport.PageDown()
+		case "ctrl+d":
+			m.viewport.HalfPageDown()
+		case "ctrl+u":
+			m.viewport.HalfPageUp()
 
 		// Go back
 		case "esc":
@@ -113,7 +132,31 @@ func (m *LogViewModel) View(width, height int) string {
 		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, content)
 	}
 
-	// Render log view (fullscreen)
+	// Apply container style (fullscreen fill) around viewport
+	container := lipgloss.NewStyle().
+		Width(width).
+		Height(height).
+		Padding(1, 2).
+		Render(m.viewport.View())
+
+	return container
+}
+
+// updateViewportContent renders all log entries and sets viewport content.
+func (m *LogViewModel) updateViewportContent() {
+	if m.loading {
+		m.viewport.SetContent(styles.LogTitleStyle.Render("Loading session log..."))
+		return
+	}
+	if m.logEntries == nil {
+		m.viewport.SetContent(styles.ErrorStyle.Render("Failed to load session log"))
+		return
+	}
+	if len(m.logEntries) == 0 {
+		m.viewport.SetContent(styles.LogTitleStyle.Render("No log entries found"))
+		return
+	}
+
 	var lines []string
 
 	// Title
@@ -121,37 +164,20 @@ func (m *LogViewModel) View(width, height int) string {
 	lines = append(lines, styles.LogTitleStyle.Render(title))
 	lines = append(lines, "")
 
-	// Calculate visible area (simple impl: show turns starting from cursor)
-	startIdx := m.cursor
-	endIdx := startIdx + 10 // show 10 turns at a time
-
-	if endIdx > len(m.logEntries) {
-		endIdx = len(m.logEntries)
-	}
-
-	// Render visible log entries
-	for i := startIdx; i < endIdx; i++ {
+	// Render ALL log entries
+	for i := range m.logEntries {
 		entry := m.logEntries[i]
 		lines = append(lines, m.renderLogEntry(entry))
 		lines = append(lines, "")
 	}
 
 	// Hint message
-	if m.hasMore && endIdx >= len(m.logEntries) {
-		lines = append(lines, styles.LogHintStyle.Render("(More entries available, use j/k to scroll)"))
+	if m.hasMore {
+		lines = append(lines, styles.LogHintStyle.Render("(More entries available)"))
 	}
 
-	// Join all lines
 	content := strings.Join(lines, "\n")
-
-	// Apply container style (fullscreen fill)
-	container := lipgloss.NewStyle().
-		Width(width).
-		Height(height).
-		Padding(1, 2).
-		Render(content)
-
-	return container
+	m.viewport.SetContent(content)
 }
 
 // renderLogEntry renders a single log entry (one turn)

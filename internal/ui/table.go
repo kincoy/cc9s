@@ -11,7 +11,7 @@ import (
 )
 
 // renderProjectTable renders the project table (Approach A: manually drawn borders, title embedded in top border)
-func renderProjectTable(projects []claudefs.Project, cursor, width, height int, sortBy SortField, sortAsc bool, showHealthColumn bool, projectHealth map[string]int) string {
+func renderProjectTable(projects []claudefs.Project, cursor, width, height int, sortBy SortField, sortAsc bool, showHealthColumn bool, projectHealth map[string]int, searchPattern string) string {
 	if len(projects) == 0 {
 		return renderEmptyState(width, height)
 	}
@@ -144,6 +144,10 @@ func renderProjectTable(projects []claudefs.Project, cursor, width, height int, 
 		if utf8.RuneCountInString(name) > nameWidth-3 {
 			name = string([]rune(name)[:nameWidth-3]) + "..."
 		}
+		// Apply search highlighting after truncation, before rowStyle render
+		// Use highlightCell to pad first, then highlight, then render - avoids
+		// Width().Render() miscalculating when ANSI escape codes are present.
+
 		path := ""
 		if showPath {
 			path = truncateProjectPath(project.Path, pathWidth)
@@ -158,18 +162,18 @@ func renderProjectTable(projects []claudefs.Project, cursor, width, height int, 
 		if i == cursor {
 			rowStyle = styles.SelectedRowStyle
 		} else {
-			rowStyle = styles.TableCellStyle
+			rowStyle = styles.TableCellStyle.Faint(true)
 		}
 		rowSep := rowStyle.Render("  ")
 
 		var rowParts []string
 		rowParts = append(rowParts,
-			rowStyle.Width(nameWidth).Render(name),
+			highlightCell(rowStyle, name, nameWidth, searchPattern),
 			rowSep,
 		)
 		if showPath {
 			rowParts = append(rowParts,
-				rowStyle.Width(pathWidth).Render(path),
+				highlightCell(rowStyle, path, pathWidth, searchPattern),
 				rowSep,
 			)
 		}

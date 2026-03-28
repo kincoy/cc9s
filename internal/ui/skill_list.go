@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kincoy/cc9s/internal/claudefs"
@@ -22,9 +23,11 @@ const (
 
 // SkillListModel skill list view model.
 type SkillListModel struct {
-	state   DefaultResourceListState[claudefs.SkillResource]
-	sortBy  SkillSortField
-	sortAsc bool
+	state     DefaultResourceListState[claudefs.SkillResource]
+	sortBy    SkillSortField
+	sortAsc   bool
+	viewport  viewport.Model
+	lastWidth int
 }
 
 type skillsLoadedMsg struct {
@@ -41,7 +44,8 @@ func NewSkillListModel() *SkillListModel {
 }
 
 func (m *SkillListModel) Init() tea.Cmd {
-	return scanSkillsCmd
+	m.viewport = NewViewportWithSize(80, 20)
+	return tea.Batch(m.viewport.Init(), scanSkillsCmd)
 }
 
 func scanSkillsCmd() tea.Msg {
@@ -50,35 +54,110 @@ func scanSkillsCmd() tea.Msg {
 
 func (m *SkillListModel) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.viewport.SetWidth(msg.Width)
+		// Body height = total - header(3) - tabs(2) - footer(1)
+		bodyHeight := msg.Height - 6
+		if bodyHeight < 1 {
+			bodyHeight = 1
+		}
+		m.viewport.SetHeight(bodyHeight)
+		m.updateViewportContent()
+
 	case skillsLoadedMsg:
 		items := append([]claudefs.SkillResource(nil), msg.result.Skills...)
 		m.sortSkills(items)
 		m.state.SetItems(items, m.skillHooks())
+		m.updateViewportContent()
+		return func() tea.Msg { return StopLoadingMsg{Resource: ResourceSkills} }
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "j", "down":
 			if m.state.Cursor < len(m.state.VisibleItems)-1 {
 				m.state.Cursor++
+				m.updateViewportContent()
+				EnsureLineVisible(&m.viewport, m.state.Cursor)
 			}
 		case "k", "up":
 			if m.state.Cursor > 0 {
 				m.state.Cursor--
+				m.updateViewportContent()
+				EnsureLineVisible(&m.viewport, m.state.Cursor)
 			}
 		case "G":
 			if len(m.state.VisibleItems) > 0 {
 				m.state.Cursor = len(m.state.VisibleItems) - 1
+				m.updateViewportContent()
+				EnsureLineVisible(&m.viewport, m.state.Cursor)
 			}
 		case "g":
 			m.state.Cursor = 0
+			m.updateViewportContent()
+			EnsureLineVisible(&m.viewport, m.state.Cursor)
+
+		// Half-page and full-page navigation (cursor-based)
+		case "ctrl+d":
+			halfPage := m.viewport.Height() / 2
+			if halfPage < 1 {
+				halfPage = 1
+			}
+			m.state.Cursor += halfPage
+			if m.state.Cursor >= len(m.state.VisibleItems) {
+				m.state.Cursor = len(m.state.VisibleItems) - 1
+			}
+			if m.state.Cursor < 0 {
+				m.state.Cursor = 0
+			}
+			m.updateViewportContent()
+			EnsureLineVisible(&m.viewport, m.state.Cursor)
+		case "ctrl+u":
+			halfPage := m.viewport.Height() / 2
+			if halfPage < 1 {
+				halfPage = 1
+			}
+			m.state.Cursor -= halfPage
+			if m.state.Cursor < 0 {
+				m.state.Cursor = 0
+			}
+			m.updateViewportContent()
+			EnsureLineVisible(&m.viewport, m.state.Cursor)
+		case "pgdown":
+			fullPage := m.viewport.Height()
+			if fullPage < 1 {
+				fullPage = 1
+			}
+			m.state.Cursor += fullPage
+			if m.state.Cursor >= len(m.state.VisibleItems) {
+				m.state.Cursor = len(m.state.VisibleItems) - 1
+			}
+			if m.state.Cursor < 0 {
+				m.state.Cursor = 0
+			}
+			m.updateViewportContent()
+			EnsureLineVisible(&m.viewport, m.state.Cursor)
+		case "pgup":
+			fullPage := m.viewport.Height()
+			if fullPage < 1 {
+				fullPage = 1
+			}
+			m.state.Cursor -= fullPage
+			if m.state.Cursor < 0 {
+				m.state.Cursor = 0
+			}
+			m.updateViewportContent()
+			EnsureLineVisible(&m.viewport, m.state.Cursor)
+
 		case "s":
 			m.sortBy = (m.sortBy + 1) % 4
 			m.sortSkills(m.state.AllItems)
 			m.applyContext()
+			m.updateViewportContent()
 		case "S":
 			m.sortAsc = !m.sortAsc
 			m.sortSkills(m.state.AllItems)
 			m.applyContext()
+			m.updateViewportContent()
 		case "d":
 			if len(m.state.VisibleItems) > 0 {
 				return func() tea.Msg {
@@ -103,6 +182,7 @@ func (m *SkillListModel) GetContext() Context {
 
 func (m *SkillListModel) SetContext(ctx Context) tea.Cmd {
 	m.state.SetContext(ctx, m.skillHooks())
+	m.updateViewportContent()
 	return nil
 }
 
@@ -113,6 +193,8 @@ func (m *SkillListModel) Reload() tea.Cmd {
 }
 
 func (m *SkillListModel) View(width, height int) string {
+	m.lastWidth = width
+
 	if m.state.Loading {
 		return renderCenteredText("Loading skills...", width, height)
 	}
@@ -127,11 +209,40 @@ func (m *SkillListModel) View(width, height int) string {
 		return renderCenteredText("No skills found", width, height)
 	}
 
-	return renderSkillTable(m.state.VisibleItems, m.state.Cursor, width, height, m.sortBy, m.sortAsc, m.ShowProjectColumn())
+	return m.viewport.View()
+}
+
+// updateViewportContent renders the skill table and sets viewport content.
+func (m *SkillListModel) updateViewportContent() {
+	if m.state.Loading {
+		return
+	}
+
+	width := m.lastWidth
+	if width == 0 {
+		width = m.viewport.Width()
+	}
+	if width == 0 {
+		width = 80
+	}
+	height := m.viewport.Height()
+	if height == 0 {
+		height = 20
+	}
+
+	contextLabel := ""
+	if m.state.Context.Type == ContextAll {
+		contextLabel = "All Skills"
+	} else if m.state.Context.Type == ContextProject {
+		contextLabel = m.state.Context.Value
+	}
+	content := renderSkillTable(m.state.VisibleItems, m.state.Cursor, width, height, m.sortBy, m.sortAsc, m.ShowProjectColumn(), contextLabel)
+	m.viewport.SetContent(content)
 }
 
 func (m *SkillListModel) ApplyFilter(query string) {
 	m.state.ApplyFilter(query, m.skillHooks())
+	m.updateViewportContent()
 }
 
 func (m *SkillListModel) ShowProjectColumn() bool {

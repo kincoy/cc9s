@@ -5,6 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -14,11 +15,14 @@ import (
 
 // DetailViewModel session detail panel Model
 type DetailViewModel struct {
-	session claudefs.Session       // session object
-	stats   *claudefs.SessionStats // stats data (loaded async)
-	loading bool                   // whether loading is in progress
-	width   int                    // panel width
-	height  int                    // panel height
+	session    claudefs.Session       // session object
+	stats      *claudefs.SessionStats // stats data (loaded async)
+	loading    bool                   // whether loading is in progress
+	width      int                    // panel width
+	height     int                    // panel height
+	viewport   viewport.Model         // viewport for scrolling content
+	lastWidth  int                    // last screen width
+	lastHeight int                    // last screen height
 }
 
 // NewDetailViewModel creates a new detail panel Model
@@ -30,7 +34,11 @@ func NewDetailViewModel(session claudefs.Session) *DetailViewModel {
 }
 
 func (m *DetailViewModel) Init() tea.Cmd {
-	return loadSessionStatsCmd(m.session)
+	m.viewport = NewViewportWithSize(80, 20) // default size, updated on WindowSizeMsg
+	return tea.Batch(
+		m.viewport.Init(),
+		loadSessionStatsCmd(m.session),
+	)
 }
 
 // loadSessionStatsCmd asynchronously loads session stats
@@ -51,10 +59,12 @@ func (m *DetailViewModel) Update(msg tea.Msg) tea.Cmd {
 		} else {
 			m.stats = msg.stats
 		}
+		m.updateViewportContent()
 
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
+		m.lastWidth = msg.Width
+		m.lastHeight = msg.Height
+		m.resizeViewport()
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -63,6 +73,18 @@ func (m *DetailViewModel) Update(msg tea.Msg) tea.Cmd {
 			return func() tea.Msg {
 				return CloseDetailMsg{}
 			}
+		case "j", "down":
+			m.viewport.ScrollDown(1)
+		case "k", "up":
+			m.viewport.ScrollUp(1)
+		case "pgdown":
+			m.viewport.PageDown()
+		case "pgup":
+			m.viewport.PageUp()
+		case "g":
+			m.viewport.GotoTop()
+		case "G":
+			m.viewport.GotoBottom()
 		}
 	}
 
@@ -112,7 +134,63 @@ func (m *DetailViewModel) ViewBox(width int) string {
 			Render(content)
 	}
 
-	// Render detail panel
+	// Apply panel style around the viewport
+	return lipgloss.NewStyle().
+		Width(panelWidth).
+		Padding(1, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.ColorBorder).
+		Render(m.viewport.View())
+}
+
+// resizeViewport recalculates panel and inner viewport dimensions from screen size
+func (m *DetailViewModel) resizeViewport() {
+	width := m.lastWidth
+	height := m.lastHeight
+	if width == 0 {
+		width = 80
+	}
+	if height == 0 {
+		height = 24
+	}
+
+	// Calculate panel width: 60% of screen width, min 60 cols, max 100 cols
+	panelWidth := int(float64(width) * 0.6)
+	if panelWidth < 60 {
+		panelWidth = 60
+	}
+	if panelWidth > 100 {
+		panelWidth = 100
+	}
+
+	// Panel height: 80% of screen height
+	panelHeight := int(float64(height) * 0.8)
+	if panelHeight < 10 {
+		panelHeight = 10
+	}
+
+	// Inner viewport size = panel minus border (2 cols width, 2 rows height) minus padding (4 cols width, 2 rows height)
+	innerWidth := panelWidth - 2 - 4 // border left+right + padding left+right
+	if innerWidth < 1 {
+		innerWidth = 1
+	}
+	innerHeight := panelHeight - 2 - 2 // border top+bottom + padding top+bottom
+	if innerHeight < 1 {
+		innerHeight = 1
+	}
+
+	m.viewport.SetWidth(innerWidth)
+	m.viewport.SetHeight(innerHeight)
+	m.updateViewportContent()
+}
+
+// updateViewportContent renders the detail content and sets it on the viewport
+func (m *DetailViewModel) updateViewportContent() {
+	if m.loading || m.stats == nil {
+		return
+	}
+
+	// Render detail panel content (same sections as before)
 	var sections []string
 
 	// Title section
@@ -147,14 +225,7 @@ func (m *DetailViewModel) ViewBox(width int) string {
 
 	// Join all sections
 	content := strings.Join(sections, "\n")
-
-	// Apply panel style
-	return lipgloss.NewStyle().
-		Width(panelWidth).
-		Padding(1, 2).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(styles.ColorBorder).
-		Render(content)
+	m.viewport.SetContent(content)
 }
 
 // renderMetadata renders the metadata section

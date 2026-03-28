@@ -10,7 +10,7 @@ import (
 	"github.com/kincoy/cc9s/internal/ui/styles"
 )
 
-func renderSkillTable(skills []claudefs.SkillResource, cursor, width, height int, sortBy SkillSortField, sortAsc bool, showProjectColumn bool) string {
+func renderSkillTable(skills []claudefs.SkillResource, cursor, width, height int, sortBy SkillSortField, sortAsc bool, showProjectColumn bool, contextLabel string) string {
 	if len(skills) == 0 {
 		return ""
 	}
@@ -22,7 +22,16 @@ func renderSkillTable(skills []claudefs.SkillResource, cursor, width, height int
 		Foreground(styles.ColorWarning).
 		Bold(true).
 		Render(fmt.Sprintf("(%d)", len(skills)))
-	title := resourceType + countStr
+
+	contextPart := ""
+	if contextLabel != "" {
+		contextPart = lipgloss.NewStyle().
+			Foreground(styles.ColorPurple).
+			Bold(true).
+			Render(fmt.Sprintf("(%s)", contextLabel))
+	}
+
+	title := resourceType + contextPart + countStr
 	sb.WriteString(renderTopBorder(width, title))
 
 	contentWidth := width - 4
@@ -92,7 +101,7 @@ func renderSkillTable(skills []claudefs.SkillResource, cursor, width, height int
 
 	for i := startIdx; i < endIdx; i++ {
 		skill := skills[i]
-		rowStyle := styles.TableCellStyle
+		rowStyle := styles.TableCellStyle.Faint(true)
 		if i == cursor {
 			rowStyle = styles.SelectedRowStyle
 		}
@@ -125,7 +134,9 @@ func renderSkillTable(skills []claudefs.SkillResource, cursor, width, height int
 			statusStyle.Inherit(rowStyle).Width(statusWidth).Render(styles.SkillStatusText(skill.Status)),
 		)
 
-		sb.WriteString(renderRowBorder(lipgloss.JoinHorizontal(lipgloss.Top, rowParts...)))
+		row := lipgloss.JoinHorizontal(lipgloss.Top, rowParts...)
+		row = rowStyle.Width(contentWidth).Render(row)
+		sb.WriteString(renderRowBorder(row))
 	}
 
 	fillEmptyRows(&sb, contentWidth, endIdx-startIdx, visibleHeight)

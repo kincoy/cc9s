@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kincoy/cc9s/internal/claudefs"
@@ -32,12 +33,14 @@ type SessionListModel struct {
 	filterQuery      string                   // current search query
 	cursor           int
 	selectedRows     map[int]struct{}
+	viewport         viewport.Model // viewport for content display
 	loading          bool
 	sortBy           SessionSortField
 	sortAsc          bool
 	restoreSessionID string
 	restoreCursor    int
 	showCleanupHints bool
+	lastWidth        int // last rendered width from View()
 }
 
 // sessionsLoadedMsg session data loaded message
@@ -75,6 +78,7 @@ func (m *SessionListModel) SetContext(ctx Context) tea.Cmd {
 	m.filterQuery = ""
 	m.selectedRows = nil
 	m.applyContext()
+	m.updateViewportContent()
 	if len(m.allSessions) == 0 {
 		return loadAllSessionsCmd()
 	}
@@ -89,14 +93,29 @@ func (m *SessionListModel) ShowProjectColumn() bool {
 // SetCleanupHints enables or disables the cleanup recommendation column.
 func (m *SessionListModel) SetCleanupHints(show bool) {
 	m.showCleanupHints = show
+	m.updateViewportContent()
 }
 
 func (m *SessionListModel) Init() tea.Cmd {
-	return loadAllSessionsCmd()
+	m.viewport = NewViewportWithSize(80, 20) // default size, will be updated in Update(WindowSizeMsg)
+	return tea.Batch(
+		m.viewport.Init(),
+		loadAllSessionsCmd(),
+	)
 }
 
 func (m *SessionListModel) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.viewport.SetWidth(msg.Width)
+		// Body height = total - header(3) - tabs(2) - footer(1)
+		bodyHeight := msg.Height - 6
+		if bodyHeight < 1 {
+			bodyHeight = 1
+		}
+		m.viewport.SetHeight(bodyHeight)
+		m.updateViewportContent()
+
 	case sessionsLoadedMsg:
 		m.loading = false
 		if msg.err != nil {
@@ -109,6 +128,8 @@ func (m *SessionListModel) Update(msg tea.Msg) tea.Cmd {
 			m.applyContext()
 			m.restoreCursorAfterReload()
 		}
+		m.updateViewportContent()
+		return func() tea.Msg { return StopLoadingMsg{Resource: ResourceSessions} }
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -116,27 +137,91 @@ func (m *SessionListModel) Update(msg tea.Msg) tea.Cmd {
 		case "j", "down":
 			if m.cursor < len(m.sessions)-1 {
 				m.cursor++
+				m.updateViewportContent()
+				EnsureLineVisible(&m.viewport, m.cursor)
 			}
 		case "k", "up":
 			if m.cursor > 0 {
 				m.cursor--
+				m.updateViewportContent()
+				EnsureLineVisible(&m.viewport, m.cursor)
 			}
 		case "G":
 			if len(m.sessions) > 0 {
 				m.cursor = len(m.sessions) - 1
+				m.updateViewportContent()
+				EnsureLineVisible(&m.viewport, m.cursor)
 			}
 		case "g":
 			m.cursor = 0
+			m.updateViewportContent()
+			EnsureLineVisible(&m.viewport, m.cursor)
+
+		// Half-page and full-page navigation (cursor-based)
+		case "ctrl+d":
+			if len(m.sessions) > 0 {
+				halfPage := m.viewport.Height() / 2
+				if halfPage < 1 {
+					halfPage = 1
+				}
+				m.cursor += halfPage
+				if m.cursor >= len(m.sessions) {
+					m.cursor = len(m.sessions) - 1
+				}
+				m.updateViewportContent()
+				EnsureLineVisible(&m.viewport, m.cursor)
+			}
+		case "ctrl+u":
+			if len(m.sessions) > 0 {
+				halfPage := m.viewport.Height() / 2
+				if halfPage < 1 {
+					halfPage = 1
+				}
+				m.cursor -= halfPage
+				if m.cursor < 0 {
+					m.cursor = 0
+				}
+				m.updateViewportContent()
+				EnsureLineVisible(&m.viewport, m.cursor)
+			}
+		case "pgdown":
+			if len(m.sessions) > 0 {
+				pageSize := m.viewport.Height()
+				if pageSize < 1 {
+					pageSize = 1
+				}
+				m.cursor += pageSize
+				if m.cursor >= len(m.sessions) {
+					m.cursor = len(m.sessions) - 1
+				}
+				m.updateViewportContent()
+				EnsureLineVisible(&m.viewport, m.cursor)
+			}
+		case "pgup":
+			if len(m.sessions) > 0 {
+				pageSize := m.viewport.Height()
+				if pageSize < 1 {
+					pageSize = 1
+				}
+				m.cursor -= pageSize
+				if m.cursor < 0 {
+					m.cursor = 0
+				}
+				m.updateViewportContent()
+				EnsureLineVisible(&m.viewport, m.cursor)
+			}
 
 		// Sort shortcuts
 		case "s":
 			m.sortBy = (m.sortBy + 1) % 4
 			m.sortGlobalSessions(m.allSessions)
 			m.applyContext()
+			m.updateViewportContent()
 		case "S":
 			m.sortAsc = !m.sortAsc
 			m.sortGlobalSessions(m.allSessions)
 			m.applyContext()
+			m.updateViewportContent()
 
 		// Enter session
 		case "enter":
@@ -201,8 +286,8 @@ func (m *SessionListModel) Update(msg tea.Msg) tea.Cmd {
 				m.ToggleSelect(m.cursor)
 			}
 
-		// Delete
-		case "ctrl+d":
+		// Delete selected session(s)
+		case "x":
 			return m.deleteSelectedCmd()
 		}
 	}
@@ -210,8 +295,47 @@ func (m *SessionListModel) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
+// updateViewportContent updates the viewport with rendered session table content
+func (m *SessionListModel) updateViewportContent() {
+	if m.loading {
+		return
+	}
+
+	// Prefer lastWidth (actual rendering width from View()) over viewport width
+	width := m.lastWidth
+	if width == 0 {
+		width = m.viewport.Width()
+	}
+	if width == 0 {
+		width = 80 // default width if not yet sized
+	}
+	height := m.viewport.Height()
+	if height == 0 {
+		height = 20 // default height if not yet sized
+	}
+
+	// Get context label
+	contextLabel := ""
+	if m.context.Type == ContextAll {
+		contextLabel = "All Projects"
+	} else if m.context.Type == ContextProject {
+		contextLabel = m.context.Value
+	}
+
+	content := renderSessionTable(
+		m.sessions, m.cursor, width, height,
+		m.selectedRows, m.ShowProjectColumn(),
+		m.sortBy, m.sortAsc, contextLabel,
+		m.showCleanupHints,
+	)
+	m.viewport.SetContent(content)
+}
+
 // View renders the session list view
 func (m *SessionListModel) View(width, height int) string {
+	m.lastWidth = width
+
+	// Loading state
 	if m.loading {
 		return renderCenteredText("Loading sessions...", width, height)
 	}
@@ -226,20 +350,7 @@ func (m *SessionListModel) View(width, height int) string {
 		return renderCenteredText("No sessions found", width, height)
 	}
 
-	// Get context label
-	contextLabel := ""
-	if m.context.Type == ContextAll {
-		contextLabel = "All Projects"
-	} else if m.context.Type == ContextProject {
-		contextLabel = m.context.Value
-	}
-
-	return renderSessionTable(
-		m.sessions, m.cursor, width, height,
-		m.selectedRows, m.ShowProjectColumn(),
-		m.sortBy, m.sortAsc, contextLabel,
-		m.showCleanupHints,
-	)
+	return m.viewport.View()
 }
 
 // Reload reloads all session data
@@ -359,6 +470,7 @@ func (m *SessionListModel) ApplyFilter(query string) {
 		m.selectedRows = nil
 	}
 	m.applySearchFilter()
+	m.updateViewportContent()
 }
 
 // matchesFilter checks if a GlobalSession matches the search query

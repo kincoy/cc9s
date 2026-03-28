@@ -114,6 +114,7 @@ func TestSessionListReloadPreservesFocusedSession(t *testing.T) {
 		},
 		cursor: 1,
 	}
+	model.viewport = NewViewportWithSize(80, 20)
 
 	model.captureCursorForReload()
 
@@ -143,6 +144,7 @@ func TestSessionListReloadFallsBackToPreviousIndex(t *testing.T) {
 		},
 		cursor: 2,
 	}
+	model.viewport = NewViewportWithSize(80, 20)
 
 	model.captureCursorForReload()
 
@@ -192,6 +194,7 @@ func TestSessionListViewShowsCleanupHintsColumn(t *testing.T) {
 			},
 		},
 	}
+	model.viewport = NewViewportWithSize(140, 12)
 
 	model.SetCleanupHints(true)
 	out := model.View(140, 12)
