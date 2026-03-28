@@ -54,6 +54,7 @@ func newResourceRegistry() *ResourceRegistry {
 			},
 			EnsureActive: func(a *AppModel, _ Context) tea.Cmd {
 				a.setActiveResource(ResourceProjects)
+				a.globalProjectContext = Context{Type: ContextAll}
 				return nil
 			},
 			CurrentContext: func(_ *AppModel) Context {
@@ -115,7 +116,7 @@ func newResourceRegistry() *ResourceRegistry {
 					hints = append(hints, KeyHint{Key: "/", Label: "Search"})
 				}
 				if ctx.HasMulti {
-					hints = append(hints, KeyHint{Key: "Ctrl+D", Label: "Delete"})
+					hints = append(hints, KeyHint{Key: "x", Label: "Delete"})
 				}
 				if ctx.Descriptor.Capabilities.SupportsAllContextShortcut {
 					hints = append(hints, KeyHint{Key: "0", Label: "All ctx"})
@@ -135,22 +136,29 @@ func newResourceRegistry() *ResourceRegistry {
 						{Key: "/", Label: "         Search sessions or lifecycle states"},
 						{Key: "Esc", Label: "       Go back to projects"},
 						{Key: "Space", Label: "      Toggle select session"},
-						{Key: "Ctrl+D", Label: "     Delete selected session(s)"},
+						{Key: "x", Label: "         Delete selected session(s)"},
 					},
 				}
 			},
 			ResolveTargetContext: func(a *AppModel) Context {
-				return a.currentTargetContext(false)
+				return a.globalProjectContext
 			},
 			EnsureActive: func(a *AppModel, targetCtx Context) tea.Cmd {
 				a.setActiveResource(ResourceSessions)
 				if a.sessionList == nil {
 					a.sessionList = NewSessionListModel()
 					cmd := a.sessionList.Init()
-					if ctxCmd := a.sessionList.SetContext(targetCtx); ctxCmd != nil {
-						return tea.Batch(cmd, ctxCmd)
+					if a.ready {
+						a.sessionList.Update(tea.WindowSizeMsg{Width: a.width, Height: a.height})
 					}
-					return cmd
+					// Set loading state synchronously to avoid race with async scan
+					a.isLoading = true
+					a.loadingText = "Loading sessions..."
+					a.loadingResource = ResourceSessions
+					if ctxCmd := a.sessionList.SetContext(targetCtx); ctxCmd != nil {
+						return tea.Batch(cmd, ctxCmd, a.spinner.Tick)
+					}
+					return tea.Batch(cmd, a.spinner.Tick)
 				}
 				return a.sessionList.SetContext(targetCtx)
 			},
@@ -219,17 +227,23 @@ func newResourceRegistry() *ResourceRegistry {
 				}
 			},
 			ResolveTargetContext: func(a *AppModel) Context {
-				return a.currentTargetContext(false)
+				return a.globalProjectContext
 			},
 			EnsureActive: func(a *AppModel, targetCtx Context) tea.Cmd {
 				a.setActiveResource(ResourceSkills)
 				if a.skillList == nil {
 					a.skillList = NewSkillListModel()
 					cmd := a.skillList.Init()
-					if ctxCmd := a.skillList.SetContext(targetCtx); ctxCmd != nil {
-						return tea.Batch(cmd, ctxCmd)
+					if a.ready {
+						a.skillList.Update(tea.WindowSizeMsg{Width: a.width, Height: a.height})
 					}
-					return cmd
+					a.isLoading = true
+					a.loadingText = "Loading skills..."
+					a.loadingResource = ResourceSkills
+					if ctxCmd := a.skillList.SetContext(targetCtx); ctxCmd != nil {
+						return tea.Batch(cmd, ctxCmd, a.spinner.Tick)
+					}
+					return tea.Batch(cmd, a.spinner.Tick)
 				}
 				return a.skillList.SetContext(targetCtx)
 			},
@@ -298,17 +312,24 @@ func newResourceRegistry() *ResourceRegistry {
 				}
 			},
 			ResolveTargetContext: func(a *AppModel) Context {
-				return a.currentTargetContext(false)
+				return a.globalProjectContext
 			},
 			EnsureActive: func(a *AppModel, targetCtx Context) tea.Cmd {
 				a.setActiveResource(ResourceAgents)
 				if a.agentList == nil {
 					a.agentList = NewAgentListModel()
 					cmd := a.agentList.Init()
-					if ctxCmd := a.agentList.SetContext(targetCtx); ctxCmd != nil {
-						return tea.Batch(cmd, ctxCmd)
+					if a.ready {
+						a.agentList.Update(tea.WindowSizeMsg{Width: a.width, Height: a.height})
 					}
-					return cmd
+					// Set loading state synchronously to avoid race with async scan
+					a.isLoading = true
+					a.loadingText = "Loading agents..."
+					a.loadingResource = ResourceAgents
+					if ctxCmd := a.agentList.SetContext(targetCtx); ctxCmd != nil {
+						return tea.Batch(cmd, ctxCmd, a.spinner.Tick)
+					}
+					return tea.Batch(cmd, a.spinner.Tick)
 				}
 				return a.agentList.SetContext(targetCtx)
 			},

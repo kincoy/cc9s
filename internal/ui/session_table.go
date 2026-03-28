@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 	"github.com/kincoy/cc9s/internal/claudefs"
@@ -76,8 +77,8 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 	}
 
 	summaryWidth := contentWidth - fixedWidth - (sepCount * 2)
-	if summaryWidth < 20 {
-		summaryWidth = 20
+	if summaryWidth < 10 {
+		summaryWidth = 10
 	}
 
 	// === Header row ===
@@ -139,7 +140,7 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 		} else if isSelected {
 			rowStyle = styles.MultiSelectedStyle
 		} else {
-			rowStyle = styles.TableCellStyle
+			rowStyle = styles.TableCellStyle.Faint(true)
 		}
 
 		// Format session ID
@@ -151,6 +152,18 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 		statusText := styles.LifecycleStatusText(gs.Session.Lifecycle.State)
 		statusStyle := styles.LifecycleStatusStyle(gs.Session.Lifecycle.State)
 		assessment := claudefs.QuickAssessSession(gs.Session)
+		isStale := gs.Session.Lifecycle.State == claudefs.SessionLifecycleStale
+
+		// Apply strikethrough to ID for Stale sessions
+		if isStale {
+			sessionID = lipgloss.NewStyle().Strikethrough(true).Render(sessionID)
+		}
+
+		// Format project name (truncate if too long for column)
+		projectName := gs.ProjectName
+		if showProjectColumn && utf8.RuneCountInString(projectName) > projectWidth {
+			projectName = string([]rune(projectName)[:projectWidth-3]) + "..."
+		}
 
 		rowSep := rowStyle.Render("  ")
 
@@ -158,11 +171,15 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 		if summaryText == "" {
 			summaryText = "-"
 		}
+		// Apply strikethrough to summary for Stale sessions
+		if isStale {
+			summaryText = lipgloss.NewStyle().Strikethrough(true).Render(summaryText)
+		}
 
 		var rowParts []string
 		if showProjectColumn {
 			rowParts = append(rowParts,
-				rowStyle.Width(projectWidth).Render(gs.ProjectName), rowSep,
+				rowStyle.Width(projectWidth).Render(projectName), rowSep,
 				rowStyle.Width(idWidth).Render(sessionID), rowSep,
 				rowStyle.Width(summaryWidth).Render(truncateSummary(summaryText, summaryWidth)), rowSep,
 				statusStyle.Inherit(rowStyle).Width(statusWidth).Render(statusText),
@@ -206,6 +223,7 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 		}
 
 		row := lipgloss.JoinHorizontal(lipgloss.Top, rowParts...)
+		row = rowStyle.Width(contentWidth).Render(row)
 		sb.WriteString(renderRowBorder(row))
 	}
 

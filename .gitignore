@@ -20,3 +20,6 @@ specs/
 docs/
 community/
 AGENTS.md
+
+# Worktrees
+.worktrees/

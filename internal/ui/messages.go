@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/kincoy/cc9s/internal/claudefs"
+import (
+	"time"
+
+	"github.com/kincoy/cc9s/internal/claudefs"
+)
 
 // ContextType context type enum
 type ContextType int
@@ -143,3 +147,30 @@ type SessionsDeletedMsg struct {
 
 // ToggleCleanupHintsMsg toggles the cleanup recommendation column in session view.
 type ToggleCleanupHintsMsg struct{}
+
+// ClockTickMsg updates header clock
+type ClockTickMsg struct {
+	Time time.Time
+}
+
+// StartLoadingMsg starts spinner with given text
+type StartLoadingMsg struct {
+	Text string
+}
+
+// StopLoadingMsg stops spinner for the given resource.
+// A zero Resource means "unconditional stop" (e.g. health computation failure).
+type StopLoadingMsg struct {
+	Resource ResourceType
+}
+
+// HealthComputedMsg signals health computation is complete
+type HealthComputedMsg struct {
+	Health map[string]int
+}
+
+// ShowToastMsg displays a toast notification
+type ShowToastMsg struct {
+	Message string
+	IsError bool
+}

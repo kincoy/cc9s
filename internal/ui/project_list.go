@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kincoy/cc9s/internal/claudefs"
@@ -29,6 +30,7 @@ type ProjectListModel struct {
 	allProjects   []claudefs.Project // complete project list (filter source)
 	filterQuery   string             // current search query
 	cursor        int                // currently selected row index
+	viewport      viewport.Model     // viewport for scrolling
 	loading       bool               // whether data is loading
 	sortBy        SortField          // current sort field
 	sortAsc       bool               // sort direction
@@ -49,7 +51,11 @@ func NewProjectListModel() *ProjectListModel {
 }
 
 func (m *ProjectListModel) Init() tea.Cmd {
-	return scanProjectsCmd
+	m.viewport = NewViewportWithSize(80, 20) // default size, will be updated in Update(WindowSizeMsg)
+	return tea.Batch(
+		m.viewport.Init(),
+		scanProjectsCmd,
+	)
 }
 
 // scanProjectsCmd asynchronously scans projects
@@ -60,6 +66,16 @@ func scanProjectsCmd() tea.Msg {
 
 func (m *ProjectListModel) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.viewport.SetWidth(msg.Width)
+		// Body height = total - header(3) - tabs(2) - footer(1)
+		bodyHeight := msg.Height - 6
+		if bodyHeight < 1 {
+			bodyHeight = 1
+		}
+		m.viewport.SetHeight(bodyHeight)
+		m.updateViewportContent()
+
 	case projectsLoadedMsg:
 		m.loading = false
 		m.allProjects = append([]claudefs.Project(nil), msg.result.Projects...)
@@ -70,6 +86,7 @@ func (m *ProjectListModel) Update(msg tea.Msg) tea.Cmd {
 		if len(m.projects) > 0 {
 			m.cursor = 0
 		}
+		m.updateViewportContent()
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -77,27 +94,83 @@ func (m *ProjectListModel) Update(msg tea.Msg) tea.Cmd {
 		case "j", "down":
 			if m.cursor < len(m.projects)-1 {
 				m.cursor++
+				m.updateViewportContent()
+				EnsureLineVisible(&m.viewport, m.cursor)
 			}
 		case "k", "up":
 			if m.cursor > 0 {
 				m.cursor--
+				m.updateViewportContent()
+				EnsureLineVisible(&m.viewport, m.cursor)
 			}
 		case "G":
 			if len(m.projects) > 0 {
 				m.cursor = len(m.projects) - 1
+				m.updateViewportContent()
+				EnsureLineVisible(&m.viewport, m.cursor)
 			}
 		case "g":
 			m.cursor = 0
+			m.updateViewportContent()
+			EnsureLineVisible(&m.viewport, m.cursor)
+
+		// Half-page and full-page navigation (cursor-based, works with calculateScrollWindow)
+		case "ctrl+d":
+			halfPage := m.viewport.Height() / 2
+			if halfPage < 1 {
+				halfPage = 1
+			}
+			m.cursor += halfPage
+			if m.cursor >= len(m.projects) {
+				m.cursor = len(m.projects) - 1
+			}
+			m.updateViewportContent()
+			EnsureLineVisible(&m.viewport, m.cursor)
+		case "ctrl+u":
+			halfPage := m.viewport.Height() / 2
+			if halfPage < 1 {
+				halfPage = 1
+			}
+			m.cursor -= halfPage
+			if m.cursor < 0 {
+				m.cursor = 0
+			}
+			m.updateViewportContent()
+			EnsureLineVisible(&m.viewport, m.cursor)
+		case "pgdown":
+			page := m.viewport.Height()
+			if page < 1 {
+				page = 1
+			}
+			m.cursor += page
+			if m.cursor >= len(m.projects) {
+				m.cursor = len(m.projects) - 1
+			}
+			m.updateViewportContent()
+			EnsureLineVisible(&m.viewport, m.cursor)
+		case "pgup":
+			page := m.viewport.Height()
+			if page < 1 {
+				page = 1
+			}
+			m.cursor -= page
+			if m.cursor < 0 {
+				m.cursor = 0
+			}
+			m.updateViewportContent()
+			EnsureLineVisible(&m.viewport, m.cursor)
 
 		// Sort shortcuts
 		case "s":
 			m.sortBy = nextProjectSortField(m.sortBy, m.lastWidth, m.showHealthColumn)
 			m.sortProjects()
 			m.applyFilter()
+			m.updateViewportContent()
 		case "S":
 			m.sortAsc = !m.sortAsc
 			m.sortProjects()
 			m.applyFilter()
+			m.updateViewportContent()
 
 		// Enter session list
 		case "enter":
@@ -118,6 +191,29 @@ func (m *ProjectListModel) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
+// updateViewportContent updates the viewport with rendered project table content
+func (m *ProjectListModel) updateViewportContent() {
+	if m.loading {
+		return
+	}
+
+	// Prefer lastWidth (actual rendering width from View()) over viewport width
+	width := m.lastWidth
+	if width == 0 {
+		width = m.viewport.Width()
+	}
+	if width == 0 {
+		width = 80 // default width if not yet sized
+	}
+	height := m.viewport.Height()
+	if height == 0 {
+		height = 20 // default height if not yet sized
+	}
+
+	content := renderProjectTable(m.projects, m.cursor, width, height, m.sortBy, m.sortAsc, m.showHealthColumn, m.projectHealth, m.filterQuery)
+	m.viewport.SetContent(content)
+}
+
 // View renders the project list view
 func (m *ProjectListModel) View(width, height int) string {
 	m.lastWidth = width
@@ -127,7 +223,7 @@ func (m *ProjectListModel) View(width, height int) string {
 		return renderLoadingState(width, height)
 	}
 
-	return renderProjectTable(m.projects, m.cursor, width, height, m.sortBy, m.sortAsc, m.showHealthColumn, m.projectHealth)
+	return m.viewport.View()
 }
 
 // GetStats returns stats info (for AppModel header)
@@ -177,6 +273,7 @@ func renderLoadingState(width, height int) string {
 func (m *ProjectListModel) ApplyFilter(query string) {
 	m.filterQuery = query
 	m.applyFilter()
+	m.updateViewportContent()
 }
 
 // clampCursor ensures cursor is within valid range
@@ -265,16 +362,4 @@ func nextProjectSortField(current SortField, width int, showHealthColumn bool) S
 
 func projectLocalSkillTotal(project claudefs.Project) int {
 	return project.SkillCount + project.CommandCount
-}
-
-func (m *ProjectListModel) loadProjectHealth(homeDir string) {
-	health, err := claudefs.ComputeHealthMetrics(homeDir)
-	if err != nil {
-		return
-	}
-
-	m.projectHealth = make(map[string]int)
-	for _, ps := range health.ProjectScores {
-		m.projectHealth[ps.ProjectName] = ps.HealthScore
-	}
 }

@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kincoy/cc9s/internal/claudefs"
@@ -21,10 +22,12 @@ const (
 
 // AgentListModel agent list view model.
 type AgentListModel struct {
-	state   DefaultResourceListState[claudefs.AgentResource]
-	loadErr error
-	sortBy  AgentSortField
-	sortAsc bool
+	state     DefaultResourceListState[claudefs.AgentResource]
+	loadErr   error
+	sortBy    AgentSortField
+	sortAsc   bool
+	viewport  viewport.Model
+	lastWidth int
 }
 
 type agentsLoadedMsg struct {
@@ -40,7 +43,11 @@ func NewAgentListModel() *AgentListModel {
 }
 
 func (m *AgentListModel) Init() tea.Cmd {
-	return scanAgentsCmd
+	m.viewport = NewViewportWithSize(80, 20) // default size, updated on WindowSizeMsg
+	return tea.Batch(
+		m.viewport.Init(),
+		scanAgentsCmd,
+	)
 }
 
 func scanAgentsCmd() tea.Msg {
@@ -49,11 +56,24 @@ func scanAgentsCmd() tea.Msg {
 
 func (m *AgentListModel) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.viewport.SetWidth(msg.Width)
+		// Body height = total - header (3) - footer (1)
+		// Body height = total - header(3) - tabs(2) - footer(1)
+		bodyHeight := msg.Height - 6
+		if bodyHeight < 1 {
+			bodyHeight = 1
+		}
+		m.viewport.SetHeight(bodyHeight)
+		m.updateViewportContent()
+
 	case agentsLoadedMsg:
 		m.loadErr = msg.result.Err
 		items := append([]claudefs.AgentResource(nil), msg.result.Agents...)
 		m.sortAgents(items)
 		m.state.SetItems(items, m.agentHooks())
+		m.updateViewportContent()
+		return func() tea.Msg { return StopLoadingMsg{Resource: ResourceAgents} }
 
 	case tea.KeyPressMsg:
 		if m.loadErr != nil {
@@ -64,25 +84,88 @@ func (m *AgentListModel) Update(msg tea.Msg) tea.Cmd {
 		case "j", "down":
 			if m.state.Cursor < len(m.state.VisibleItems)-1 {
 				m.state.Cursor++
+				m.updateViewportContent()
+				EnsureLineVisible(&m.viewport, m.state.Cursor)
 			}
 		case "k", "up":
 			if m.state.Cursor > 0 {
 				m.state.Cursor--
+				m.updateViewportContent()
+				EnsureLineVisible(&m.viewport, m.state.Cursor)
 			}
 		case "G":
 			if len(m.state.VisibleItems) > 0 {
 				m.state.Cursor = len(m.state.VisibleItems) - 1
+				m.updateViewportContent()
+				EnsureLineVisible(&m.viewport, m.state.Cursor)
 			}
 		case "g":
 			m.state.Cursor = 0
+			m.updateViewportContent()
+			EnsureLineVisible(&m.viewport, m.state.Cursor)
+
+		// Half-page and full-page navigation
+		case "ctrl+d":
+			halfPage := m.viewport.Height() / 2
+			if halfPage < 1 {
+				halfPage = 1
+			}
+			m.state.Cursor += halfPage
+			if m.state.Cursor >= len(m.state.VisibleItems) {
+				m.state.Cursor = len(m.state.VisibleItems) - 1
+			}
+			if m.state.Cursor < 0 {
+				m.state.Cursor = 0
+			}
+			m.updateViewportContent()
+			EnsureLineVisible(&m.viewport, m.state.Cursor)
+		case "ctrl+u":
+			halfPage := m.viewport.Height() / 2
+			if halfPage < 1 {
+				halfPage = 1
+			}
+			m.state.Cursor -= halfPage
+			if m.state.Cursor < 0 {
+				m.state.Cursor = 0
+			}
+			m.updateViewportContent()
+			EnsureLineVisible(&m.viewport, m.state.Cursor)
+		case "pgdown":
+			fullPage := m.viewport.Height()
+			if fullPage < 1 {
+				fullPage = 1
+			}
+			m.state.Cursor += fullPage
+			if m.state.Cursor >= len(m.state.VisibleItems) {
+				m.state.Cursor = len(m.state.VisibleItems) - 1
+			}
+			if m.state.Cursor < 0 {
+				m.state.Cursor = 0
+			}
+			m.updateViewportContent()
+			EnsureLineVisible(&m.viewport, m.state.Cursor)
+		case "pgup":
+			fullPage := m.viewport.Height()
+			if fullPage < 1 {
+				fullPage = 1
+			}
+			m.state.Cursor -= fullPage
+			if m.state.Cursor < 0 {
+				m.state.Cursor = 0
+			}
+			m.updateViewportContent()
+			EnsureLineVisible(&m.viewport, m.state.Cursor)
+
 		case "s":
 			m.sortBy = (m.sortBy + 1) % 3
 			m.sortAgents(m.state.AllItems)
 			m.applyContext()
+			m.updateViewportContent()
 		case "S":
 			m.sortAsc = !m.sortAsc
 			m.sortAgents(m.state.AllItems)
 			m.applyContext()
+			m.updateViewportContent()
 		case "d":
 			if len(m.state.VisibleItems) > 0 {
 				return func() tea.Msg {
@@ -107,6 +190,7 @@ func (m *AgentListModel) GetContext() Context {
 
 func (m *AgentListModel) SetContext(ctx Context) tea.Cmd {
 	m.state.SetContext(ctx, m.agentHooks())
+	m.updateViewportContent()
 	return nil
 }
 
@@ -118,6 +202,8 @@ func (m *AgentListModel) Reload() tea.Cmd {
 }
 
 func (m *AgentListModel) View(width, height int) string {
+	m.lastWidth = width
+
 	if m.state.Loading {
 		return renderCenteredText("Loading agents...", width, height)
 	}
@@ -130,11 +216,42 @@ func (m *AgentListModel) View(width, height int) string {
 		}
 		return renderCenteredText("No agents found", width, height)
 	}
-	return renderAgentTable(m.state.VisibleItems, m.state.Cursor, width, height, m.ShowProjectColumn(), m.sortBy, m.sortAsc)
+
+	return m.viewport.View()
+}
+
+// updateViewportContent updates the viewport with rendered agent table content
+func (m *AgentListModel) updateViewportContent() {
+	if m.state.Loading || m.loadErr != nil || len(m.state.VisibleItems) == 0 {
+		return
+	}
+
+	// Prefer lastWidth (actual rendering width from View()) over viewport width
+	width := m.lastWidth
+	if width == 0 {
+		width = m.viewport.Width()
+	}
+	if width == 0 {
+		width = 80 // default width if not yet sized
+	}
+	height := m.viewport.Height()
+	if height == 0 {
+		height = 20 // default height if not yet sized
+	}
+
+	contextLabel := ""
+	if m.state.Context.Type == ContextAll {
+		contextLabel = "All Agents"
+	} else if m.state.Context.Type == ContextProject {
+		contextLabel = m.state.Context.Value
+	}
+	content := renderAgentTable(m.state.VisibleItems, m.state.Cursor, width, height, m.ShowProjectColumn(), m.sortBy, m.sortAsc, contextLabel)
+	m.viewport.SetContent(content)
 }
 
 func (m *AgentListModel) ApplyFilter(query string) {
 	m.state.ApplyFilter(query, m.agentHooks())
+	m.updateViewportContent()
 }
 
 func (m *AgentListModel) ShowProjectColumn() bool {

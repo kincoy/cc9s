@@ -11,6 +11,7 @@ func TestSwitchToSkillsPreservesProjectContextFromSessions(t *testing.T) {
 	app := NewAppModel()
 	app.setActiveResource(ResourceSessions)
 	app.sessionList = NewSessionListModelForProject("cc9s")
+	app.globalProjectContext = Context{Type: ContextProject, Value: "cc9s"}
 
 	model, cmd := app.Update(SwitchResourceMsg{Resource: ResourceSkills})
 	if cmd == nil {
@@ -95,6 +96,7 @@ func TestSwitchToAgentsPreservesProjectContextFromSessions(t *testing.T) {
 	app := NewAppModel()
 	app.setActiveResource(ResourceSessions)
 	app.sessionList = NewSessionListModelForProject("cc9s")
+	app.globalProjectContext = Context{Type: ContextProject, Value: "cc9s"}
 
 	model, cmd := app.Update(SwitchResourceMsg{Resource: ResourceAgents})
 	if cmd == nil {
@@ -513,6 +515,209 @@ func TestCurrentHeaderStateUsesDescriptorForAgentLoadError(t *testing.T) {
 	state := app.currentHeaderState()
 	if state.StatsLabel != "load error" {
 		t.Fatalf("stats label = %q, want load error", state.StatsLabel)
+	}
+}
+
+// --- Bug 1: StopLoadingMsg must be resource-scoped ---
+
+func TestStopLoadingIgnoredWhenResourceMismatches(t *testing.T) {
+	app := NewAppModel()
+	app.isLoading = true
+	app.loadingResource = ResourceAgents
+
+	// Skills finishes loading — must NOT stop the Agents spinner
+	model, cmd := app.Update(StopLoadingMsg{Resource: ResourceSkills})
+	if cmd != nil {
+		t.Fatalf("expected no command, got %v", cmd)
+	}
+	appModel := model.(*AppModel)
+	if !appModel.isLoading {
+		t.Fatal("isLoading should remain true when mismatched resource stops loading")
+	}
+
+	// Agents finishes loading — should stop spinner
+	model, cmd = appModel.Update(StopLoadingMsg{Resource: ResourceAgents})
+	if cmd != nil {
+		t.Fatalf("expected no command, got %v", cmd)
+	}
+	appModel = model.(*AppModel)
+	if appModel.isLoading {
+		t.Fatal("isLoading should be false when matching resource stops loading")
+	}
+}
+
+func TestStopLoadingZeroResourceIsUnconditional(t *testing.T) {
+	// Health computation failure sends StopLoadingMsg{} (Resource = 0)
+	app := NewAppModel()
+	app.isLoading = true
+	app.loadingResource = ResourceProjects
+
+	model, cmd := app.Update(StopLoadingMsg{})
+	if cmd != nil {
+		t.Fatalf("expected no command, got %v", cmd)
+	}
+	appModel := model.(*AppModel)
+	if appModel.isLoading {
+		t.Fatal("isLoading should be false for unconditional stop (zero Resource)")
+	}
+}
+
+func TestCrossResourceLoadingRaceDoesNotKillCurrentSpinner(t *testing.T) {
+	// Simulate: user on Skills tab, switches to Agents mid-load
+	app := NewAppModel()
+	app.setActiveResource(ResourceSkills)
+	app.skillList = NewSkillListModel()
+	app.isLoading = true
+	app.loadingResource = ResourceSkills
+
+	// User switches to Agents (starts agents loading)
+	model, _ := app.Update(SwitchResourceMsg{Resource: ResourceAgents})
+	appModel := model.(*AppModel)
+	if !appModel.isLoading {
+		t.Fatal("isLoading should be true after switching to Agents")
+	}
+	if appModel.loadingResource != ResourceAgents {
+		t.Fatalf("loadingResource = %v, want ResourceAgents", appModel.loadingResource)
+	}
+
+	// Skills finishes loading — must not stop Agents spinner
+	model, _ = appModel.Update(skillsLoadedMsg{
+		result: claudefs.SkillScanResult{},
+	})
+	appModel = model.(*AppModel)
+	if !appModel.isLoading {
+		t.Fatal("isLoading should remain true: Agents is still loading")
+	}
+}
+
+// --- Bug 2: Forward path must sync detail overlays ---
+
+func TestSkillLoadedViaForwardPathSyncsDetailOverlay(t *testing.T) {
+	app := NewAppModel()
+	app.setActiveResource(ResourceSkills)
+	app.skillList = NewSkillListModel()
+	app.skillList.Init() // Initialize viewport
+	app.skillList.state.Loading = true
+
+	// Open detail overlay with old data
+	app.showingSkillDetail = true
+	app.skillDetailView = NewSkillDetailViewModel(claudefs.SkillResource{
+		Name:    "my-skill",
+		Path:    "/old/path.md",
+		Summary: "old summary",
+	})
+
+	// Reload completes with updated data
+	model, cmd := app.Update(skillsLoadedMsg{
+		result: claudefs.SkillScanResult{
+			Skills: []claudefs.SkillResource{
+				{Name: "my-skill", Path: "/new/path.md", Summary: "new summary"},
+			},
+		},
+	})
+	if cmd == nil {
+		t.Fatal("expected StopLoadingMsg command from forward path")
+	}
+
+	appModel := model.(*AppModel)
+	if appModel.skillDetailView.skill.Path != "/new/path.md" {
+		t.Fatalf("detail overlay skill path = %q, want /new/path.md (overlay should sync after reload)",
+			appModel.skillDetailView.skill.Path)
+	}
+	if appModel.skillDetailView.skill.Summary != "new summary" {
+		t.Fatalf("detail overlay skill summary = %q, want 'new summary'",
+			appModel.skillDetailView.skill.Summary)
+	}
+}
+
+func TestAgentLoadedViaForwardPathSyncsDetailOverlay(t *testing.T) {
+	app := NewAppModel()
+	app.setActiveResource(ResourceAgents)
+	app.agentList = NewAgentListModel()
+	app.agentList.Init() // Initialize viewport
+	app.agentList.state.Loading = true
+
+	// Open detail overlay with old data
+	app.showingAgentDetail = true
+	app.agentDetailView = NewAgentDetailViewModel(claudefs.AgentResource{
+		Name:    "my-agent",
+		Path:    "/old/path.md",
+		Summary: "old summary",
+	})
+
+	// Reload completes with updated data
+	model, cmd := app.Update(agentsLoadedMsg{
+		result: claudefs.AgentScanResult{
+			Agents: []claudefs.AgentResource{
+				{Name: "my-agent", Path: "/new/path.md", Summary: "new summary"},
+			},
+		},
+	})
+	if cmd == nil {
+		t.Fatal("expected StopLoadingMsg command from forward path")
+	}
+
+	appModel := model.(*AppModel)
+	if appModel.agentDetailView.agent.Path != "/new/path.md" {
+		t.Fatalf("detail overlay agent path = %q, want /new/path.md (overlay should sync after reload)",
+			appModel.agentDetailView.agent.Path)
+	}
+	if appModel.agentDetailView.agent.Summary != "new summary" {
+		t.Fatalf("detail overlay agent summary = %q, want 'new summary'",
+			appModel.agentDetailView.agent.Summary)
+	}
+}
+
+func TestSkillListUpdateReturnsStopLoadingMsgCommand(t *testing.T) {
+	// Simple unit test to verify SkillListModel.Update returns a cmd
+	skillList := NewSkillListModel()
+	skillList.Init()
+	skillList.state.Loading = true
+
+	cmd := skillList.Update(skillsLoadedMsg{
+		result: claudefs.SkillScanResult{
+			Skills: []claudefs.SkillResource{
+				{Name: "test-skill", Path: "/test/path.md"},
+			},
+		},
+	})
+
+	if cmd == nil {
+		t.Fatal("skillList.Update should return StopLoadingMsg command")
+	}
+}
+
+func TestAppUpdateForwardsSkillLoadedAndReturnsCmd(t *testing.T) {
+	// Test that app.Update correctly forwards skillsLoadedMsg and returns the cmd
+	app := NewAppModel()
+	app.setActiveResource(ResourceSkills)
+	app.skillList = NewSkillListModel()
+	app.skillList.Init()
+	app.skillList.state.Loading = true
+
+	// Add detail overlay to match original test scenario
+	app.showingSkillDetail = true
+	app.skillDetailView = NewSkillDetailViewModel(claudefs.SkillResource{
+		Name:    "test-skill",
+		Path:    "/old/path.md",
+		Summary: "old",
+	})
+
+	model, cmd := app.Update(skillsLoadedMsg{
+		result: claudefs.SkillScanResult{
+			Skills: []claudefs.SkillResource{
+				{Name: "test-skill", Path: "/new/path.md", Summary: "new"},
+			},
+		},
+	})
+
+	if cmd == nil {
+		t.Fatal("app.Update should forward skillsLoadedMsg and return StopLoadingMsg command")
+	}
+
+	appModel := model.(*AppModel)
+	if appModel.skillList.state.Loading {
+		t.Fatal("skillList should have Loading=false after processing loaded message")
 	}
 }
 

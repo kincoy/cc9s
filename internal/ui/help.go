@@ -32,6 +32,10 @@ func buildHelpLines(registry *ResourceRegistry, active ResourceDescriptor) []str
 		"  " + styles.FooterKeyStyle.Render("k / ↑") + styles.FooterStyle.Render("     Move up"),
 		"  " + styles.FooterKeyStyle.Render("g") + styles.FooterStyle.Render("         Go to top"),
 		"  " + styles.FooterKeyStyle.Render("G") + styles.FooterStyle.Render("         Go to bottom"),
+		"  " + styles.FooterKeyStyle.Render("Ctrl+D") + styles.FooterStyle.Render("   Scroll half-page down"),
+		"  " + styles.FooterKeyStyle.Render("Ctrl+U") + styles.FooterStyle.Render("   Scroll half-page up"),
+		"  " + styles.FooterKeyStyle.Render("PgDn") + styles.FooterStyle.Render("     Scroll page down"),
+		"  " + styles.FooterKeyStyle.Render("PgUp") + styles.FooterStyle.Render("     Scroll page up"),
 		"",
 		"  " + styles.HeaderStyle.Render("Sorting"),
 		"  " + styles.FooterKeyStyle.Render("s") + styles.FooterStyle.Render("         Cycle sort field"),
@@ -93,6 +97,9 @@ func renderHelp(width, height int, registry *ResourceRegistry, active ResourceDe
 	return lipgloss.NewStyle().
 		Width(width).
 		Height(height).
+		Border(lipgloss.DoubleBorder()).
+		BorderForeground(styles.ColorHighlight).
+		Padding(0, 1).
 		Render(content)
 }
 

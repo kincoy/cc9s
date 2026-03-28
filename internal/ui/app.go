@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -43,6 +44,12 @@ const (
 	InputCommand                  // command mode (triggered by :)
 )
 
+// Layout constants
+const (
+	headerHeight = 3 // header block (title + status + breadcrumb)
+	footerHeight = 1 // footer hint bar
+)
+
 // AppModel root application Model, responsible for routing and layout
 type AppModel struct {
 	width    int
@@ -53,8 +60,9 @@ type AppModel struct {
 	quitting bool
 	homeDir  string
 
-	currentResource   ResourceType
-	inputMode         InputMode
+	currentResource      ResourceType
+	globalProjectContext Context // shared project context across Sessions/Skills/Agents
+	inputMode            InputMode
 	projectList       *ProjectListModel
 	sessionList       *SessionListModel
 	skillList         *SkillListModel
@@ -74,6 +82,11 @@ type AppModel struct {
 	flashUntil   time.Time
 	flashIsError bool
 
+	// Toast notification system
+	toastMsg     string
+	toastUntil   time.Time
+	toastIsError bool
+
 	showingDetail        bool
 	detailView           *DetailViewModel
 	showingProjectDetail bool
@@ -85,6 +98,14 @@ type AppModel struct {
 	showingLog           bool
 	logView              *LogViewModel
 
+	tabs *TabsModel
+
+	// Animation system
+	spinner        spinner.Model
+	isLoading      bool
+	loadingText    string
+	loadingResource ResourceType // which resource triggered the loading
+	currentTime    time.Time
 }
 
 // NewAppModel creates a new application Model
@@ -101,6 +122,10 @@ func NewAppModel() *AppModel {
 	ci.Placeholder = "command..."
 	ci.CharLimit = 256
 
+	s := spinner.New()
+	s.Spinner = spinner.Line
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+
 	return &AppModel{
 		currentResource:  ResourceProjects,
 		homeDir:          homeDir,
@@ -108,11 +133,37 @@ func NewAppModel() *AppModel {
 		resourceRegistry: newResourceRegistry(),
 		searchInput:      si,
 		commandInput:     ci,
+		spinner:          s,
+		currentTime:      time.Now(),
+		tabs:             NewTabsModel(),
 	}
 }
 
 func (a *AppModel) Init() tea.Cmd {
-	return a.projectList.Init()
+	return tea.Batch(
+		a.projectList.Init(),
+		clockTicker(),
+	)
+}
+
+func clockTicker() tea.Cmd {
+	return tea.Every(time.Second, func(t time.Time) tea.Msg {
+		return ClockTickMsg{Time: t}
+	})
+}
+
+func computeHealthCmd(homeDir string) tea.Cmd {
+	return func() tea.Msg {
+		health, err := claudefs.ComputeHealthMetrics(homeDir)
+		if err != nil {
+			return StopLoadingMsg{}
+		}
+		result := make(map[string]int)
+		for _, ps := range health.ProjectScores {
+			result[ps.ProjectName] = ps.HealthScore
+		}
+		return HealthComputedMsg{Health: result}
+	}
 }
 
 func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -129,65 +180,128 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 
-	// Detail view handles message
-	if a.showingDetail && a.detailView != nil {
-		if _, ok := msg.(CloseDetailMsg); ok {
-			a.showingDetail = false
-			a.detailView = nil
-			return a, nil
-		}
-		return a, a.detailView.Update(msg)
+	// Check if this is a data-loaded message that needs special handling.
+	// These messages must be processed even when overlays are active, to:
+	// 1. Stop the loading spinner for the correct resource
+	// 2. Sync detail overlays with updated data
+	isDataLoadedMsg := false
+	switch msg.(type) {
+	case projectsLoadedMsg, skillsLoadedMsg, agentsLoadedMsg, sessionsLoadedMsg:
+		isDataLoadedMsg = true
 	}
 
-	if a.showingProjectDetail && a.projectDetailView != nil {
-		if _, ok := msg.(CloseProjectDetailMsg); ok {
-			a.showingProjectDetail = false
-			a.projectDetailView = nil
-			return a, nil
+	// Detail views and overlays handle most messages, but data-loaded messages
+	// are processed first to ensure spinner state and overlay sync.
+	if !isDataLoadedMsg {
+		// Detail view handles message
+		if a.showingDetail && a.detailView != nil {
+			if _, ok := msg.(CloseDetailMsg); ok {
+				a.showingDetail = false
+				a.detailView = nil
+				return a, nil
+			}
+			return a, a.detailView.Update(msg)
 		}
-		return a, a.projectDetailView.Update(msg)
-	}
 
-	// Skill detail view handles message
-	if a.showingSkillDetail && a.skillDetailView != nil {
-		if _, ok := msg.(CloseSkillDetailMsg); ok {
-			a.showingSkillDetail = false
-			a.skillDetailView = nil
-			return a, nil
+		if a.showingProjectDetail && a.projectDetailView != nil {
+			if _, ok := msg.(CloseProjectDetailMsg); ok {
+				a.showingProjectDetail = false
+				a.projectDetailView = nil
+				return a, nil
+			}
+			return a, a.projectDetailView.Update(msg)
 		}
-		if keyMsg, ok := msg.(tea.KeyPressMsg); ok && (keyMsg.String() == "e" || keyMsg.String() == "E") {
-			return a, editSkillCmd(a.skillDetailView.skill)
-		}
-		return a, a.skillDetailView.Update(msg)
-	}
 
-	if a.showingAgentDetail && a.agentDetailView != nil {
-		if _, ok := msg.(CloseAgentDetailMsg); ok {
-			a.showingAgentDetail = false
-			a.agentDetailView = nil
-			return a, nil
+		// Skill detail view handles message
+		if a.showingSkillDetail && a.skillDetailView != nil {
+			if _, ok := msg.(CloseSkillDetailMsg); ok {
+				a.showingSkillDetail = false
+				a.skillDetailView = nil
+				return a, nil
+			}
+			if keyMsg, ok := msg.(tea.KeyPressMsg); ok && (keyMsg.String() == "e" || keyMsg.String() == "E") {
+				return a, editSkillCmd(a.skillDetailView.skill)
+			}
+			return a, a.skillDetailView.Update(msg)
 		}
-		if keyMsg, ok := msg.(tea.KeyPressMsg); ok && (keyMsg.String() == "e" || keyMsg.String() == "E") {
-			return a, editAgentCmd(a.agentDetailView.agent)
-		}
-		return a, a.agentDetailView.Update(msg)
-	}
 
-	// Log view handles message
-	if a.showingLog && a.logView != nil {
-		if _, ok := msg.(CloseLogMsg); ok {
-			a.showingLog = false
-			a.logView = nil
-			return a, nil
+		if a.showingAgentDetail && a.agentDetailView != nil {
+			if _, ok := msg.(CloseAgentDetailMsg); ok {
+				a.showingAgentDetail = false
+				a.agentDetailView = nil
+				return a, nil
+			}
+			if keyMsg, ok := msg.(tea.KeyPressMsg); ok && (keyMsg.String() == "e" || keyMsg.String() == "E") {
+				return a, editAgentCmd(a.agentDetailView.agent)
+			}
+			return a, a.agentDetailView.Update(msg)
 		}
-		return a, a.logView.Update(msg)
+
+		// Log view handles message
+		if a.showingLog && a.logView != nil {
+			if _, ok := msg.(CloseLogMsg); ok {
+				a.showingLog = false
+				a.logView = nil
+				return a, nil
+			}
+			return a, a.logView.Update(msg)
+		}
 	}
 
 	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		a.spinner, cmd = a.spinner.Update(msg)
+		return a, cmd
+
+	case ClockTickMsg:
+		a.currentTime = msg.Time
+		return a, clockTicker()
+
+	case StartLoadingMsg:
+		a.isLoading = true
+		a.loadingText = msg.Text
+		return a, a.spinner.Tick
+
+	case StopLoadingMsg:
+		// Only stop loading if the message targets the current loading resource.
+		// Zero Resource means unconditional stop (e.g. health computation failure).
+		if msg.Resource == 0 || msg.Resource == a.loadingResource {
+			a.isLoading = false
+		}
+		return a, nil
+
+	case ShowToastMsg:
+		a.toastMsg = msg.Message
+		a.toastIsError = msg.IsError
+		a.toastUntil = time.Now().Add(2 * time.Second)
+		return a, nil
+
+	case HealthComputedMsg:
+		a.projectList.projectHealth = msg.Health
+		a.projectList.updateViewportContent()
+		a.isLoading = false
+		a.toastMsg = "Health metrics computed"
+		a.toastIsError = false
+		a.toastUntil = time.Now().Add(2 * time.Second)
+		return a, nil
+
 	case tea.WindowSizeMsg:
 		a.width = msg.Width
 		a.height = msg.Height
 		a.ready = true
+
+		// Forward resize to all list models so their viewports get correct dimensions
+		a.projectList.Update(msg)
+		if a.sessionList != nil {
+			a.sessionList.Update(msg)
+		}
+		if a.skillList != nil {
+			a.skillList.Update(msg)
+		}
+		if a.agentList != nil {
+			a.agentList.Update(msg)
+		}
 
 	case ShowConfirmDialogMsg:
 		a.showingDialog = true
@@ -195,6 +309,7 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case BackToProjectsMsg:
+		a.globalProjectContext = Context{Type: ContextAll}
 		a.projectList.cursor = a.lastProjectCursor
 		if ensureActive := a.resourceRegistry.MustGet(ResourceProjects).EnsureActive; ensureActive != nil {
 			return a, ensureActive(a, Context{Type: ContextAll})
@@ -291,13 +406,16 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case EnterProjectMsg:
 		a.lastProjectCursor = a.projectList.cursor
+		// Set global project context so all resources (Sessions/Skills/Agents) share it
+		a.globalProjectContext = Context{Type: ContextProject, Value: msg.Project.Name}
 		descriptor := a.resourceRegistry.MustGet(ResourceSessions)
 		if descriptor.EnsureActive != nil {
-			return a, descriptor.EnsureActive(a, Context{Type: ContextProject, Value: msg.Project.Name})
+			return a, descriptor.EnsureActive(a, a.globalProjectContext)
 		}
 		return a, nil
 
 	case SwitchContextMsg:
+		a.globalProjectContext = msg.Context
 		if setContext := a.currentResourceDescriptor().SetContext; setContext != nil {
 			return a, setContext(a, msg.Context)
 		}
@@ -305,6 +423,7 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ToggleCleanupHintsMsg:
 		if a.sessionList != nil {
 			a.sessionList.showCleanupHints = !a.sessionList.showCleanupHints
+			a.sessionList.updateViewportContent()
 		}
 		return a, nil
 
@@ -314,17 +433,13 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case SessionsDeletedMsg:
 		if len(msg.Errs) > 0 {
-			a.SetFlash(
-				fmt.Sprintf("Deleted %d sessions, %d errors", msg.Deleted, len(msg.Errs)),
-				true,
-				5*time.Second,
-			)
+			a.toastMsg = fmt.Sprintf("Deleted %d, %d errors", msg.Deleted, len(msg.Errs))
+			a.toastIsError = true
+			a.toastUntil = time.Now().Add(3 * time.Second)
 		} else {
-			a.SetFlash(
-				fmt.Sprintf("Deleted %d sessions", msg.Deleted),
-				false,
-				2*time.Second,
-			)
+			a.toastMsg = fmt.Sprintf("Deleted %d sessions", msg.Deleted)
+			a.toastIsError = false
+			a.toastUntil = time.Now().Add(2 * time.Second)
 		}
 		// Refresh current list + project list
 		var cmds []tea.Cmd
@@ -378,6 +493,14 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.helpScroll = 0
 			}
 			return a, nil
+		case "1":
+			return a, func() tea.Msg { return SwitchResourceMsg{Resource: ResourceProjects} }
+		case "2":
+			return a, func() tea.Msg { return SwitchResourceMsg{Resource: ResourceSessions} }
+		case "3":
+			return a, func() tea.Msg { return SwitchResourceMsg{Resource: ResourceSkills} }
+		case "4":
+			return a, func() tea.Msg { return SwitchResourceMsg{Resource: ResourceAgents} }
 		case "esc":
 			if a.showHelp {
 				a.showHelp = false
@@ -438,13 +561,38 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Always forward project data updates (project stats need refresh after session deletion)
+	// Always forward data-loaded messages to their respective list models,
+	// even when the user has switched away during loading. This ensures
+	// StopLoadingMsg gets emitted and the loading spinner doesn't get stuck.
+	var forwardedCmd tea.Cmd
+	var isLoadedMsg bool
 	if _, ok := msg.(projectsLoadedMsg); ok {
 		a.projectList.Update(msg)
+		isLoadedMsg = true
+	}
+	if _, ok := msg.(skillsLoadedMsg); ok && a.skillList != nil {
+		forwardedCmd = a.skillList.Update(msg)
+		isLoadedMsg = true
+	}
+	if _, ok := msg.(agentsLoadedMsg); ok && a.agentList != nil {
+		forwardedCmd = a.agentList.Update(msg)
+		isLoadedMsg = true
+	}
+	if _, ok := msg.(sessionsLoadedMsg); ok && a.sessionList != nil {
+		forwardedCmd = a.sessionList.Update(msg)
+		isLoadedMsg = true
 	}
 
+	// Sync detail overlays after processing loaded messages
+	if isLoadedMsg {
+		a.syncDetailOverlaysAfterLoad(msg)
+		// Return the StopLoadingMsg command without calling updateCurrentView again
+		// (the loaded message was already processed by the list model above)
+		return a, forwardedCmd
+	}
+
+	// For non-loaded messages, delegate to current view
 	cmd := a.updateCurrentView(msg)
-	a.syncDetailOverlaysAfterLoad(msg)
 	return a, cmd
 }
 
@@ -461,7 +609,7 @@ func (a *AppModel) View() tea.View {
 	var content string
 
 	// Render different layouts based on screen state
-	if a.height < 6 {
+	if a.height < 8 {
 		// Small screen: show body + footer only
 		bodyHeight := a.height - 1
 		if bodyHeight < 1 {
@@ -476,10 +624,11 @@ func (a *AppModel) View() tea.View {
 		footer := a.renderFooter(a.width)
 		content = lipgloss.JoinVertical(lipgloss.Left, body, footer)
 	} else {
-		// Normal screen: header + cmdline + body + footer
+		// Normal screen: header + tabs + cmdline + body + footer
 		header := a.renderHeader()
+		tabs := a.tabs.Render(a.width)
 
-		// Command line area (between header and body, shown only in search/command mode)
+		// Command line area (between tabs and body, shown only in search/command mode)
 		cmdLine := ""
 		cmdLineHeight := 0
 		if a.inputMode != InputNormal {
@@ -498,8 +647,8 @@ func (a *AppModel) View() tea.View {
 			cmdLineHeight = 3
 		}
 
-		// Height calculation: header(3, ThickBorder) + cmdline(0|3) + footer(1) = 4|7
-		bodyHeight := a.height - 4 - cmdLineHeight
+		// Height calculation: header(3) + tabs(2) + cmdline(0|3) + footer(1)
+		bodyHeight := a.height - headerHeight - TabsHeight - footerHeight - cmdLineHeight
 		if bodyHeight < 1 {
 			bodyHeight = 1
 		}
@@ -517,9 +666,9 @@ func (a *AppModel) View() tea.View {
 		}
 
 		if cmdLineHeight > 0 {
-			content = lipgloss.JoinVertical(lipgloss.Left, header, cmdLine, body, footer)
+			content = lipgloss.JoinVertical(lipgloss.Left, header, tabs, cmdLine, body, footer)
 		} else {
-			content = lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
+			content = lipgloss.JoinVertical(lipgloss.Left, header, tabs, body, footer)
 		}
 	}
 
@@ -532,8 +681,40 @@ func (a *AppModel) View() tea.View {
 			Render(content)
 	}
 
+	// Overlay toast in top-right if active
+	if toast := a.renderToast(); toast != "" {
+		toastWidth := lipgloss.Width(toast)
+		padding := a.width - toastWidth
+		if padding < 1 {
+			padding = 1
+		}
+		rightAligned := strings.Repeat(" ", padding) + toast
+		contentLines := strings.Split(content, "\n")
+		toastLines := strings.Split(rightAligned, "\n")
+		for i := 0; i < len(toastLines) && i < len(contentLines); i++ {
+			contentLines[i] = toastLines[i]
+		}
+		content = strings.Join(contentLines, "\n")
+	}
+
 	v := tea.NewView(content)
 	v.AltScreen = true
+
+	// Dynamic window title
+	resourceName := a.currentResourceDescriptor().DisplayName
+	currentCount := a.resourceCount(a.currentResource)
+	title := fmt.Sprintf("cc9s - %s (%d)", resourceName, currentCount)
+	if a.currentResource == ResourceProjects && len(a.projectList.projectHealth) > 0 {
+		// Compute average health across projects
+		total := 0
+		for _, score := range a.projectList.projectHealth {
+			total += score
+		}
+		avgHealth := total / len(a.projectList.projectHealth)
+		title += fmt.Sprintf(" | Health: %d", avgHealth)
+	}
+	v.WindowTitle = title
+
 	return v
 }
 
@@ -581,9 +762,9 @@ func (a *AppModel) renderHeader() string {
 	state := a.currentHeaderState()
 	resourceLabel := a.currentResourceDescriptor().DisplayName
 	if state.HasFilteredState {
-		return renderHeaderWithFilter(a.width, resourceLabel, state.ContextLabel, state.StatsLabel, state.FilteredCount, state.TotalCount)
+		return renderHeaderWithFilter(a.width, resourceLabel, state.ContextLabel, state.StatsLabel, state.FilteredCount, state.TotalCount, a.currentTime)
 	}
-	return renderHeader(a.width, resourceLabel, state.ContextLabel, state.StatsLabel)
+	return renderHeader(a.width, resourceLabel, state.ContextLabel, state.StatsLabel, a.currentTime)
 }
 
 func (a *AppModel) currentHeaderState() ResourceHeaderState {
@@ -793,7 +974,14 @@ func (a *AppModel) syncDetailOverlaysAfterLoad(msg tea.Msg) {
 	}
 }
 
+
+
 func (a *AppModel) renderCurrentView(width, height int) string {
+	// Show inline spinner in body area only when loading for the *current* resource
+	if a.isLoading && a.loadingResource == a.currentResource {
+		return a.renderBodySpinner(width, height)
+	}
+
 	switch a.currentResource {
 	case ResourceProjects:
 		return a.projectList.View(width, height)
@@ -1069,7 +1257,10 @@ func (a *AppModel) executeCommand(cmdStr string) tea.Cmd {
 		if a.currentResource == ResourceProjects && a.projectList != nil {
 			a.projectList.showHealthColumn = !a.projectList.showHealthColumn
 			if a.projectList.showHealthColumn && len(a.projectList.projectHealth) == 0 {
-				a.projectList.loadProjectHealth(a.homeDir)
+				return tea.Batch(
+					func() tea.Msg { return StartLoadingMsg{Text: "Computing health metrics..."} },
+					computeHealthCmd(a.homeDir),
+				)
 			}
 		}
 		return nil
@@ -1086,8 +1277,36 @@ func (a *AppModel) currentResourceDescriptor() ResourceDescriptor {
 	return a.resourceRegistry.MustGet(a.currentResource)
 }
 
+// resourceCount returns the item count for the given resource type
+func (a *AppModel) resourceCount(r ResourceType) int {
+	switch r {
+	case ResourceProjects:
+		return len(a.projectList.projects)
+	case ResourceSessions:
+		if a.sessionList != nil {
+			return len(a.sessionList.allSessions)
+		}
+		return 0
+	case ResourceSkills:
+		if a.skillList != nil {
+			return len(a.skillList.state.AllItems)
+		}
+		return 0
+	case ResourceAgents:
+		if a.agentList != nil {
+			return len(a.agentList.state.AllItems)
+		}
+		return 0
+	default:
+		return 0
+	}
+}
+
 func (a *AppModel) setActiveResource(resource ResourceType) {
 	a.currentResource = resource
+	if a.tabs != nil {
+		a.tabs.SetCurrent(resource)
+	}
 }
 
 // applySearchToCurrentView applies the search query to the current view
@@ -1150,7 +1369,7 @@ func formatAgentSummary(width, total, ready, invalid int) string {
 }
 
 func (a *AppModel) helpViewportHeight() int {
-	if a.height < 6 {
+	if a.height < 8 {
 		bodyHeight := a.height - 1
 		if bodyHeight < 1 {
 			return 1
@@ -1158,7 +1377,7 @@ func (a *AppModel) helpViewportHeight() int {
 		return bodyHeight
 	}
 
-	bodyHeight := a.height - 4
+	bodyHeight := a.height - headerHeight - TabsHeight - footerHeight
 	if bodyHeight < 1 {
 		return 1
 	}
@@ -1172,4 +1391,41 @@ func (a *AppModel) maxHelpScroll() int {
 		return 0
 	}
 	return maxScroll
+}
+
+func (a *AppModel) renderBodySpinner(width, height int) string {
+	if !a.isLoading {
+		return ""
+	}
+
+	content := fmt.Sprintf("  %s %s", a.spinner.View(), a.loadingText)
+	style := lipgloss.NewStyle().
+		Padding(0, 2).
+		Foreground(lipgloss.Color("252"))
+	box := style.Render(content)
+
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
+}
+
+// renderToast renders the toast notification box (returns empty if expired)
+func (a *AppModel) renderToast() string {
+	if time.Now().After(a.toastUntil) {
+		return ""
+	}
+
+	icon := "✓"
+	color := lipgloss.Color("42") // Green
+	if a.toastIsError {
+		icon = "✗"
+		color = lipgloss.Color("196") // Red
+	}
+
+	content := fmt.Sprintf("%s %s", icon, a.toastMsg)
+	style := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		Padding(0, 1).
+		Foreground(color).
+		BorderForeground(color)
+
+	return style.Render(content)
 }

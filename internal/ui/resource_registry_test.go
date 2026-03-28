@@ -43,6 +43,7 @@ func TestResourceRegistryResolveAgentTargetContextFromSessionsPreservesProject(t
 	app := NewAppModel()
 	app.setActiveResource(ResourceSessions)
 	app.sessionList = NewSessionListModelForProject("cc9s")
+	app.globalProjectContext = Context{Type: ContextProject, Value: "cc9s"}
 
 	descriptor := app.resourceRegistry.MustGet(ResourceAgents)
 	ctx := descriptor.ResolveTargetContext(app)
