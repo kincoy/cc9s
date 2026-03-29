@@ -39,7 +39,7 @@ One common flow:
 - **Project overview** — See local project session, skill, command, and agent summaries, then inspect project paths and local Claude roots with `d`
 - **Session resume** — Jump directly into a Claude Code session from the TUI
 - **Search & filter** — `/` to search, `:context <name>` to filter by project
-- **Batch delete** — `Space` to select, `Ctrl+D` to delete multiple sessions
+- **Batch delete** — `Space` to select, `x` to delete multiple sessions
 - **Session details** — View session stats, summary, and tool call logs
 - **Skill resource browser** — View available Claude Code skills and commands from project, user, and plugin scopes
 - **Agent resource browser** — View file-backed Claude Code agents from project, user, and plugin scopes with Ready / Invalid states
@@ -325,7 +325,8 @@ Common patterns:
 | `d` | View project, session, skill, or agent details |
 | `e` | Edit selected skill, command, or agent file |
 | `Space` | Toggle select session |
-| `Ctrl+D` | Delete selected session(s) |
+| `x` | Delete selected session(s) |
+| `Ctrl+D` / `Ctrl+U` | Half-page down / up |
 | `l` | View session log |
 | `0` | Switch to "all projects" context |
 | `?` | Help panel |
@@ -377,6 +378,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## Acknowledgements
 
 - [k9s](https://github.com/derailed/k9s) — The design inspiration for cc9s's keyboard-driven TUI experience
+- [Mole](https://github.com/tw93/Mole) — The inspiration for cc9s's CLI design
 - [Bubble Tea](https://github.com/charmbracelet/bubbletea) / [Lip Gloss](https://github.com/charmbracelet/lipgloss) — The excellent Go TUI framework
 
 ## License

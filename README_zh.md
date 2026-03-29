@@ -39,7 +39,7 @@ cc9s 提供了一个全屏终端 UI（灵感来自 [k9s](https://github.com/dera
 - **项目总览** — 在项目层看到本地 session、skill、command、agent 摘要，并通过 `d` 查看项目路径和本地 Claude roots
 - **会话恢复** — 直接从 TUI 启动对应的 Claude Code 会话
 - **搜索与过滤** — `/` 搜索，`:context <name>` 按项目过滤
-- **多选批量删除** — `Space` 选中，`Ctrl+D` 批量删除
+- **多选批量删除** — `Space` 选中，`x` 批量删除
 - **会话详情** — 查看会话统计、摘要和工具调用日志
 - **Skill 资源页** — 查看来自项目级、用户级和 plugin 的可用 skills / commands
 - **Agent 资源页** — 查看来自项目级、用户级和 plugin 的 file-backed agents，并区分 Ready / Invalid 状态
@@ -325,7 +325,8 @@ Common patterns:
 | `d` | 查看项目、会话、skill 或 agent 详情 |
 | `e` | 编辑选中的 skill、command 或 agent 文件 |
 | `Space` | 选中/取消选中会话 |
-| `Ctrl+D` | 删除选中会话 |
+| `x` | 删除选中会话 |
+| `Ctrl+D` / `Ctrl+U` | 半页向下 / 向上滚动 |
 | `l` | 查看会话日志 |
 | `0` | 切换到"全部项目"上下文 |
 | `?` | 帮助面板 |
@@ -377,6 +378,7 @@ cc9s 读取 `~/.claude/projects/` 下的 JSONL 文件，然后从项目 `.claude
 ## 致谢
 
 - [k9s](https://github.com/derailed/k9s) — cc9s 键盘驱动 TUI 交互设计灵感来源
+- [Mole](https://github.com/tw93/Mole) — cc9s CLI 设计的灵感来源
 - [Bubble Tea](https://github.com/charmbracelet/bubbletea) / [Lip Gloss](https://github.com/charmbracelet/lipgloss) — 优秀的 Go TUI 框架
 
 ## 许可证
