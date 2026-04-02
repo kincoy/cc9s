@@ -1,4 +1,4 @@
-package cli
+package contract
 
 import "github.com/kincoy/cc9s/internal/claudefs"
 
@@ -10,98 +10,86 @@ const (
 	OutputJSON
 )
 
-// TopLevelCommand identifies the first positional argument.
-type TopLevelCommand int
+// Result is the interface for all command outputs.
+type Result interface {
+	isResult()
+}
 
-const (
-	CmdHelp TopLevelCommand = iota
-	CmdVersion
-	CmdStatus
-	CmdProjects
-	CmdSessions
-	CmdSkills
-	CmdAgents
-	CmdThemes
-)
+// ErrorPayload is the JSON error response shape.
+type ErrorPayload struct {
+	Error string `json:"error"`
+}
 
-// Verb identifies the action on a resource.
-type Verb int
+// ProjectListOptions controls projects list filtering/sorting.
+type ProjectListOptions struct {
+	Limit int
+	Sort  string
+}
 
-const (
-	VerbNone Verb = iota
-	VerbList
-	VerbInspect
-	VerbCleanup
-)
+// SessionListOptions controls sessions list filtering/sorting.
+type SessionListOptions struct {
+	Project string
+	State   string
+	Limit   int
+	Sort    string
+}
 
-// ResourceType maps to one of the four resource families.
-type ResourceType int
+// SessionInspectOptions identifies a specific session to inspect.
+type SessionInspectOptions struct {
+	ID string
+}
 
-const (
-	ResourceProject ResourceType = iota
-	ResourceSession
-	ResourceSkill
-	ResourceAgent
-)
+// ProjectInspectOptions identifies a specific project to inspect.
+type ProjectInspectOptions struct {
+	Target string
+}
 
-// Command is the fully-parsed CLI invocation.
-type Command struct {
-	TopLevel TopLevelCommand
-	Resource ResourceType
-	Verb     Verb
-	Target   string // session ID, project name, or agent name for inspect
-	Output   OutputMode
+// SkillListOptions controls skills list filtering.
+type SkillListOptions struct {
+	Project string
+	Scope   string
+	Type    string
+}
 
-	// List filters
-	Limit         int
-	ProjectFilter string
-	StateFilter   string
-	ScopeFilter   string // skills list, agents list
-	TypeFilter    string // skills list (Kind: Skill/Command)
-	Sort          string // projects list, sessions list
+// AgentListOptions controls agents list filtering.
+type AgentListOptions struct {
+	Project string
+	Scope   string
+}
 
-	// Cleanup-specific
+// AgentInspectOptions identifies a specific agent to inspect.
+type AgentInspectOptions struct {
+	Target string
+}
+
+// CleanupOptions controls the cleanup preview filters.
+type CleanupOptions struct {
+	Project   string
+	State     string
+	OlderThan string
 	DryRun    bool
-	OlderThan string // e.g. "72h"
-
-	// Raw args for error reporting
-	Args []string
 }
-
-// CommandResult is the interface for all command outputs.
-type CommandResult interface {
-	isCommandResult()
-}
-
-// --- Result types with JSON tags ---
-
-// HelpResult is the output of the help command.
-type HelpResult struct {
-	Text string
-}
-
-func (HelpResult) isCommandResult() {}
 
 // VersionResult is the output of the version command.
 type VersionResult struct {
 	Version string
 }
 
-func (VersionResult) isCommandResult() {}
+func (VersionResult) isResult() {}
 
 // StatusResult is the aggregated output of cc9s status.
 type StatusResult struct {
-	Projects       int              `json:"projects"`
-	Sessions       int              `json:"sessions"`
-	Resources      int              `json:"resources"`
-	TotalSizeBytes int64            `json:"total_size_bytes"`
-	Lifecycle      LifecycleSummary `json:"lifecycle"`
-	Issues         []StatusIssue    `json:"issues"`
-	TopProjects    []TopProject     `json:"top_projects"`
+	Projects       int                     `json:"projects"`
+	Sessions       int                     `json:"sessions"`
+	Resources      int                     `json:"resources"`
+	TotalSizeBytes int64                   `json:"total_size_bytes"`
+	Lifecycle      LifecycleSummary        `json:"lifecycle"`
+	Issues         []StatusIssue           `json:"issues"`
+	TopProjects    []TopProject            `json:"top_projects"`
 	Health         *claudefs.HealthMetrics `json:"health,omitempty"`
 }
 
-func (StatusResult) isCommandResult() {}
+func (StatusResult) isResult() {}
 
 // LifecycleSummary holds session counts by lifecycle state.
 type LifecycleSummary struct {
@@ -132,7 +120,7 @@ type ProjectListResult struct {
 	Projects []ProjectListEntry `json:"-"`
 }
 
-func (ProjectListResult) isCommandResult() {}
+func (ProjectListResult) isResult() {}
 
 // ProjectListEntry is one row in projects list.
 type ProjectListEntry struct {
@@ -152,7 +140,7 @@ type ProjectDetailResult struct {
 	ProjectDetail ProjectDetail `json:"-"`
 }
 
-func (ProjectDetailResult) isCommandResult() {}
+func (ProjectDetailResult) isResult() {}
 
 // ProjectDetail is the full projection for projects inspect.
 type ProjectDetail struct {
@@ -183,7 +171,7 @@ type SessionListResult struct {
 	Sessions []SessionListEntry `json:"-"`
 }
 
-func (SessionListResult) isCommandResult() {}
+func (SessionListResult) isResult() {}
 
 // SessionListEntry is one row in sessions list.
 type SessionListEntry struct {
@@ -199,7 +187,7 @@ type SessionDetailResult struct {
 	SessionDetail SessionDetail `json:"-"`
 }
 
-func (SessionDetailResult) isCommandResult() {}
+func (SessionDetailResult) isResult() {}
 
 // SessionDetail is the full projection for sessions inspect.
 type SessionDetail struct {
@@ -251,7 +239,7 @@ type SkillListResult struct {
 	Skills []SkillListEntry `json:"-"`
 }
 
-func (SkillListResult) isCommandResult() {}
+func (SkillListResult) isResult() {}
 
 // SkillListEntry is one row in skills list.
 type SkillListEntry struct {
@@ -269,7 +257,7 @@ type AgentListResult struct {
 	Agents []AgentListEntry `json:"-"`
 }
 
-func (AgentListResult) isCommandResult() {}
+func (AgentListResult) isResult() {}
 
 // AgentListEntry is one row in agents list.
 type AgentListEntry struct {
@@ -286,7 +274,7 @@ type AgentDetailResult struct {
 	AgentDetail AgentDetail `json:"-"`
 }
 
-func (AgentDetailResult) isCommandResult() {}
+func (AgentDetailResult) isResult() {}
 
 // AgentDetail is the full projection for agents inspect.
 type AgentDetail struct {
@@ -319,7 +307,7 @@ type ThemesResult struct {
 	Current string       `json:"-"`
 }
 
-func (ThemesResult) isCommandResult() {}
+func (ThemesResult) isResult() {}
 
 // ThemeEntry is one row in themes list.
 type ThemeEntry struct {
@@ -337,7 +325,7 @@ type CleanupResult struct {
 	Sessions []CleanupSessionMatch `json:"sessions"`
 }
 
-func (CleanupResult) isCommandResult() {}
+func (CleanupResult) isResult() {}
 
 // CleanupFilters describes the filters used for cleanup matching.
 type CleanupFilters struct {

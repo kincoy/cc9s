@@ -5,7 +5,7 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/kincoy/cc9s/internal/cli"
+	cliroot "github.com/kincoy/cc9s/internal/cli/root"
 	"github.com/kincoy/cc9s/internal/ui"
 	"github.com/kincoy/cc9s/internal/ui/styles"
 )
@@ -45,7 +45,7 @@ func main() {
 	styles.SetTheme(themeName)
 
 	if len(args) > 0 {
-		os.Exit(cli.Run(args))
+		os.Exit(cliroot.Execute(args))
 	}
 
 	p := tea.NewProgram(ui.NewAppModel())

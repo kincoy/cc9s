@@ -234,71 +234,68 @@ Each session is assessed from conversation depth, tool usage, token investment, 
 The CLI surface is best viewed directly from the binary:
 
 ```text
-cc9s -h
+cc9s --help
 
-cc9s — Claude Code session manager
+  Launch the interactive TUI when no command is provided.
 
-Usage:
-  cc9s                      Launch TUI (default, no arguments)
-  cc9s status               Environment health overview
-  cc9s projects list        List all projects
-  cc9s projects inspect <name>  Project details (match by name or path)
-  cc9s sessions list        List sessions across all projects
-  cc9s sessions inspect <id>   Session details (exact ID from list output)
-  cc9s sessions cleanup --dry-run  Preview smart cleanup recommendations (read-only)
-  cc9s skills list          List skills and commands
-  cc9s agents list          List agents
-  cc9s agents inspect <name>   Agent details (match by name or path)
-  cc9s version              Print version
-  cc9s themes               List available built-in themes
-  cc9s help                 Print this help
+  Add --json for machine-readable output.
+  Use `cc9s <resource> --help` for resource-specific flags and enums.
 
-Short flags:
-  -h, --help                Show help
-  -v, --version             Print version
-  --theme <name>            Apply theme at startup (default, dark-solid, high-contrast, gruvbox)
-  CC9S_THEME env            Same as --theme but set via environment variable
+  USAGE
 
-Commands and flags:
-  status                   (no extra flags)
-  projects list            --limit <n>  --sort <field>  --json
-  projects inspect <name>  --json
-  sessions list            --project <name>  --state <state>  --limit <n>  --sort <field>  --json
-  sessions inspect <id>    --json
-  sessions cleanup         --dry-run  --project <name>  --state <state>  --older-than <dur>  --json
-  skills list              --project <name>  --scope <scope>  --type <type>  --json
-  agents list              --project <name>  --scope <scope>  --json
-  agents inspect <name>    --json
+    cc9s [command] [--flags]
 
-  --json is supported on all commands. Default output is human-readable text.
+  EXAMPLES
 
-Enumerations:
-  --state <state>          Active, Idle, Completed, Stale (case-insensitive partial match)
-  --scope <scope>          User, Project, Plugin (case-insensitive partial match)
-  --type <type>            Skill, Command (case-insensitive partial match)
-  --sort <field>           projects: name, sessions | sessions: updated, state, project
-  --older-than <dur>       Duration, e.g. 72h, 7d, 168h, 30m
+    # Quick environment overview
+    cc9s status --json
 
-Resource aliases:
-  projects | project | proj
-  sessions | session | ss
-  skills   | skill   | sk
-  agents   | agent   | ag
+    # Find active sessions, then inspect one
+    cc9s sessions list --state active --json
+    cc9s sessions inspect <id> --json
 
-Output:
-  list commands           -> JSON array of objects
-  status / inspect / cleanup -> JSON single object
-  errors                  -> {"error":"<message>"}
-  All timestamps are RFC 3339. Paths are absolute.
+    # Preview cleanup candidates
+    cc9s sessions cleanup --dry-run --older-than 7d
 
-Common patterns:
-  cc9s status                              Quick environment health check
-  cc9s status --json                        Machine-readable overview
-  cc9s sessions list --state active --json  Find active sessions, get full IDs
-  cc9s sessions inspect <id> --json         Full session details (model, tokens, lifecycle)
-  cc9s sessions cleanup --dry-run           Preview smart cleanup recommendations
-  cc9s projects inspect cc9s               Inspect a specific project
-  cc9s skills list --project cc9s --json    Skills for one project
+    # Inspect one project or list scoped resources
+    cc9s projects inspect cc9s
+    cc9s skills list --project cc9s --scope project --json
+
+  COMMANDS
+
+    agents [command] [--flags]         List and inspect agents
+    completion [command]               Generate the autocompletion script for the specified shell
+    help [command]                     Help about any command
+    projects [command] [--flags]       List and inspect projects
+    sessions [command] [id] [--flags]  List, inspect, and clean up sessions
+    skills [command] [--flags]         List skills and commands
+    status                             Environment health overview
+    themes                             List available themes
+    version                            Print version
+
+  FLAGS
+
+    -h --help                          Help for cc9s
+    --json                             Output JSON
+    -v --version                       Print version
+```
+
+`--theme <name>` and `CC9S_THEME` are still supported, but they are handled before CLI dispatch in `main.go`, so they do not appear in the Cobra/Fang help output above.
+
+For resource-level help, examples, and allowed enum values, run:
+
+```bash
+cc9s projects --help
+cc9s sessions --help
+cc9s skills --help
+cc9s agents --help
+```
+
+Version output stays human-readable by default and switches to structured JSON with `--json`:
+
+```bash
+cc9s --version
+cc9s --version --json
 ```
 
 ## Key Bindings
