@@ -2,6 +2,7 @@ package claudefs
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -17,13 +18,22 @@ var runClaudeAgentsCommand = defaultRunClaudeAgentsCommand
 
 var activeAgentsLinePattern = regexp.MustCompile(`^\d+\s+active agents$`)
 
+// GetClaudeExec returns the Claude executable path.
+// Checks the CC9S_CLAUDE_EXEC environment variable, and fallback to "claude" if not set.
+func GetClaudeExec() string {
+	if exec := os.Getenv("CC9S_CLAUDE_EXEC"); exec != "" {
+		return exec
+	}
+	return "claude"
+}
+
 func defaultRunClaudeAgentsCommand(workDir string, settingSources string) (string, error) {
 	args := []string{"agents"}
 	if strings.TrimSpace(settingSources) != "" {
 		args = append(args, "--setting-sources", settingSources)
 	}
 
-	cmd := exec.Command("claude", args...)
+	cmd := exec.Command(GetClaudeExec(), args...)
 	if strings.TrimSpace(workDir) != "" {
 		cmd.Dir = workDir
 	}
