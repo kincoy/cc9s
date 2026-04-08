@@ -683,7 +683,7 @@ func resumeSessionCmd(session claudefs.Session) tea.Cmd {
 	return func() tea.Msg {
 		clearScreen()
 
-		cmd := exec.Command("claude", "--resume", session.ID)
+		cmd := exec.Command(claudefs.GetClaudeExec(), "--resume", session.ID)
 		cmd.Dir = session.ProjectPath
 
 		var stderr bytes.Buffer
