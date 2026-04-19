@@ -72,6 +72,14 @@ func scanProjectsDir(projectsDir string, activeMarkers map[string]activeSessionI
 			// JSONL fallback: read cwd from a JSONL file in the project directory
 			decodedPath = extractCwdFromProjectDir(filepath.Join(projectsDir, encodedPath))
 		}
+
+		// Skip projects whose working directory no longer exists on disk
+		if decodedPath != "" {
+			if _, err := os.Stat(decodedPath); os.IsNotExist(err) {
+				continue
+			}
+		}
+
 		projectName := ExtractProjectName(decodedPath)
 
 		// Scan session files under this project
