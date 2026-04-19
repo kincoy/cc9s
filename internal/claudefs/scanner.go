@@ -82,6 +82,14 @@ func scanProjectsDir(projectsDir string, activeMarkers map[string]activeSessionI
 
 		projectName := ExtractProjectName(decodedPath)
 
+		// Check whether the project working directory still exists on disk
+		pathExists := false
+		if decodedPath != "" {
+			if _, err := os.Stat(decodedPath); err == nil {
+				pathExists = true
+			}
+		}
+
 		// Scan session files under this project
 		projectDir := filepath.Join(projectsDir, encodedPath)
 		sessionCount, totalSize, lastActive, projectActiveCount := scanProjectSessions(projectDir, activeMarkers, now)
@@ -102,6 +110,7 @@ func scanProjectsDir(projectsDir string, activeMarkers map[string]activeSessionI
 				HasSkillsRoot:      resourceSummary.HasSkillsRoot,
 				HasCommandsRoot:    resourceSummary.HasCommandsRoot,
 				HasAgentsRoot:      resourceSummary.HasAgentsRoot,
+				PathExists:         pathExists,
 			})
 			totalSessions += sessionCount
 			activeCount += projectActiveCount
