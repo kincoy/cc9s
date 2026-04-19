@@ -37,8 +37,9 @@ type ProjectListModel struct {
 	lastWidth     int                // last rendered width, used to match visible sort columns
 	totalSessions int                // total session count
 	activeCount   int                // active session count
-	showHealthColumn bool
-	projectHealth    map[string]int // projectName -> healthScore
+	showHealthColumn  bool
+	showCleanupColumn bool
+	projectHealth     map[string]int // projectName -> healthScore
 }
 
 // NewProjectListModel creates a new project list Model
@@ -210,7 +211,7 @@ func (m *ProjectListModel) updateViewportContent() {
 		height = 20 // default height if not yet sized
 	}
 
-	content := renderProjectTable(m.projects, m.cursor, width, height, m.sortBy, m.sortAsc, m.showHealthColumn, m.projectHealth, m.filterQuery)
+	content := renderProjectTable(m.projects, m.cursor, width, height, m.sortBy, m.sortAsc, m.showHealthColumn, m.showCleanupColumn, m.projectHealth, m.filterQuery)
 	m.viewport.SetContent(content)
 }
 

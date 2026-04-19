@@ -480,7 +480,7 @@ func TestCleanupCommandTogglesSessionCleanupHints(t *testing.T) {
 	}
 }
 
-func TestCleanupCommandCompletionOnlyInSessions(t *testing.T) {
+func TestCleanupCommandCompletionInSessionsAndProjects(t *testing.T) {
 	app := NewAppModel()
 	app.setActiveResource(ResourceSessions)
 
@@ -498,9 +498,22 @@ func TestCleanupCommandCompletionOnlyInSessions(t *testing.T) {
 
 	app.setActiveResource(ResourceProjects)
 	candidates, _, _ = app.commandCompletionCandidates("cl", false)
+	found = false
 	for _, candidate := range candidates {
 		if candidate == "cleanup" {
-			t.Fatalf("cleanup should not complete outside sessions, got %#v", candidates)
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected cleanup completion in projects, got %#v", candidates)
+	}
+
+	app.setActiveResource(ResourceSkills)
+	candidates, _, _ = app.commandCompletionCandidates("cl", false)
+	for _, candidate := range candidates {
+		if candidate == "cleanup" {
+			t.Fatalf("cleanup should not complete outside sessions/projects, got %#v", candidates)
 		}
 	}
 }

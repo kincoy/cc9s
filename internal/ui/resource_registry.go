@@ -43,6 +43,7 @@ func newResourceRegistry() *ResourceRegistry {
 					Lines: []KeyHint{
 						{Key: ":projects", Label: "    Switch to projects resource"},
 						{Key: ":health", Label: "      Toggle HEALTH column"},
+						{Key: ":cleanup", Label: "     Toggle STATUS column (deleted projects)"},
 						{Key: "Enter", Label: "     Open selected project sessions"},
 						{Key: "d", Label: "         View selected project details"},
 						{Key: "/", Label: "         Search projects by name or path"},

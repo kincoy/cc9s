@@ -11,7 +11,7 @@ import (
 )
 
 // renderProjectTable renders the project table (Approach A: manually drawn borders, title embedded in top border)
-func renderProjectTable(projects []claudefs.Project, cursor, width, height int, sortBy SortField, sortAsc bool, showHealthColumn bool, projectHealth map[string]int, searchPattern string) string {
+func renderProjectTable(projects []claudefs.Project, cursor, width, height int, sortBy SortField, sortAsc bool, showHealthColumn bool, showCleanupColumn bool, projectHealth map[string]int, searchPattern string) string {
 	if len(projects) == 0 {
 		return renderEmptyState(width, height)
 	}
@@ -45,6 +45,10 @@ func renderProjectTable(projects []claudefs.Project, cursor, width, height int, 
 	if showHealthColumn {
 		healthWidth = 8
 	}
+	cleanupWidth := 0
+	if showCleanupColumn {
+		cleanupWidth = 10
+	}
 
 	sepCount := 5
 	if showPath {
@@ -56,9 +60,12 @@ func renderProjectTable(projects []claudefs.Project, cursor, width, height int, 
 	if showHealthColumn {
 		sepCount++
 	}
+	if showCleanupColumn {
+		sepCount++
+	}
 	sepWidth := sepCount * 2
 
-	fixedWidth := sessionsWidth + skillsWidth + agentsWidth + lastActiveWidth + healthWidth + sepWidth
+	fixedWidth := sessionsWidth + skillsWidth + agentsWidth + lastActiveWidth + healthWidth + cleanupWidth + sepWidth
 	if showSize {
 		fixedWidth += sizeWidth
 	}
@@ -92,6 +99,7 @@ func renderProjectTable(projects []claudefs.Project, cursor, width, height int, 
 		{"LOCAL AG", agentsWidth, lipgloss.Right, SortByAgentCount},
 		{"LAST ACTIVE", lastActiveWidth, lipgloss.Right, SortByActivity},
 		{"HEALTH", healthWidth, lipgloss.Right, SortByHealth},
+		{"STATUS", cleanupWidth, lipgloss.Left, -1},
 		{"SIZE", sizeWidth, lipgloss.Right, SortBySize},
 	}
 	visibleHeaders := make([]struct {
@@ -108,6 +116,9 @@ func renderProjectTable(projects []claudefs.Project, cursor, width, height int, 
 			continue
 		}
 		if h.text == "HEALTH" && !showHealthColumn {
+			continue
+		}
+		if h.text == "STATUS" && !showCleanupColumn {
 			continue
 		}
 		visibleHeaders = append(visibleHeaders, h)
@@ -205,6 +216,24 @@ func renderProjectTable(projects []claudefs.Project, cursor, width, height int, 
 			rowParts = append(rowParts,
 				rowSep,
 				healthField,
+			)
+		}
+		if showCleanupColumn {
+			statusText := "OK"
+			statusColor := styles.ColorActive
+			if !project.PathExists {
+				statusText = "Deleted"
+				statusColor = styles.ColorError
+			}
+			statusField := lipgloss.NewStyle().
+				Foreground(statusColor).
+				Inherit(rowStyle).
+				Width(cleanupWidth).
+				Align(lipgloss.Left).
+				Render(statusText)
+			rowParts = append(rowParts,
+				rowSep,
+				statusField,
 			)
 		}
 		if showSize {

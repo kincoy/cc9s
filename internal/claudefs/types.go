@@ -48,6 +48,7 @@ type Project struct {
 	HasSkillsRoot      bool      // Whether .claude/skills exists
 	HasCommandsRoot    bool      // Whether .claude/commands exists
 	HasAgentsRoot      bool      // Whether .claude/agents exists
+	PathExists         bool      // Whether the project working directory still exists on disk
 }
 
 // Session represents a Claude Code session.

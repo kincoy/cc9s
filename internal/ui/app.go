@@ -1148,6 +1148,7 @@ func (a *AppModel) commandCompletionCandidates(input string, excludeExact bool) 
 		commands := append(a.resourceRegistry.CompletionCandidates(prefix), "context")
 		if a.currentResource == ResourceProjects {
 			commands = append(commands, "health")
+			commands = append(commands, "cleanup")
 		}
 		if a.currentResource == ResourceSessions {
 			commands = append(commands, "cleanup")
@@ -1251,6 +1252,10 @@ func (a *AppModel) executeCommand(cmdStr string) tea.Cmd {
 	case "cleanup":
 		if a.currentResource == ResourceSessions {
 			return func() tea.Msg { return ToggleCleanupHintsMsg{} }
+		}
+		if a.currentResource == ResourceProjects && a.projectList != nil {
+			a.projectList.showCleanupColumn = !a.projectList.showCleanupColumn
+			a.projectList.updateViewportContent()
 		}
 		return nil
 	case "health":

@@ -38,8 +38,8 @@ func TestRenderHelpUsesRegistryCommandNamesAndActiveCapabilities(t *testing.T) {
 	if !strings.Contains(output, ":cleanup") {
 		t.Fatal("expected projects help to include cleanup command guidance")
 	}
-	if !strings.Contains(output, "Toggle cleanup recommendations") {
-		t.Fatal("expected projects help to describe cleanup recommendations")
+	if !strings.Contains(output, "Toggle STATUS column") {
+		t.Fatal("expected projects help to describe cleanup STATUS column")
 	}
 	if !strings.Contains(output, "Switch to all projects") {
 		t.Fatal("expected projects help to include all-context shortcut guidance")
