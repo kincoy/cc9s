@@ -558,6 +558,11 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return SwitchContextMsg{Context: Context{Type: ContextAll}}
 				}
 			}
+		case "r":
+			if a.isLoading {
+				return a, nil
+			}
+			return a, a.refreshCurrentResource()
 		}
 	}
 
@@ -567,7 +572,7 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var forwardedCmd tea.Cmd
 	var isLoadedMsg bool
 	if _, ok := msg.(projectsLoadedMsg); ok {
-		a.projectList.Update(msg)
+		forwardedCmd = a.projectList.Update(msg)
 		isLoadedMsg = true
 	}
 	if _, ok := msg.(skillsLoadedMsg); ok && a.skillList != nil {
@@ -959,6 +964,35 @@ func (a *AppModel) updateCurrentView(msg tea.Msg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+func (a *AppModel) refreshCurrentResource() tea.Cmd {
+	a.isLoading = true
+	a.loadingResource = a.currentResource
+	a.loadingText = "Refreshing..."
+
+	var reloadCmd tea.Cmd
+	switch a.currentResource {
+	case ResourceProjects:
+		reloadCmd = a.projectList.Reload()
+	case ResourceSessions:
+		if a.sessionList != nil {
+			reloadCmd = a.sessionList.Reload()
+		}
+	case ResourceSkills:
+		if a.skillList != nil {
+			reloadCmd = a.skillList.Reload()
+		}
+	case ResourceAgents:
+		if a.agentList != nil {
+			reloadCmd = a.agentList.Reload()
+		}
+	}
+	if reloadCmd == nil {
+		a.isLoading = false
+		return nil
+	}
+	return tea.Batch(reloadCmd, a.spinner.Tick)
 }
 
 func (a *AppModel) syncDetailOverlaysAfterLoad(msg tea.Msg) {

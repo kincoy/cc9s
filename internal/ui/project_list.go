@@ -58,6 +58,12 @@ func (m *ProjectListModel) Init() tea.Cmd {
 	)
 }
 
+// Reload rescans projects from disk.
+func (m *ProjectListModel) Reload() tea.Cmd {
+	m.loading = true
+	return scanProjectsCmd
+}
+
 // scanProjectsCmd asynchronously scans projects
 func scanProjectsCmd() tea.Msg {
 	result := claudefs.ScanProjects()
@@ -87,6 +93,7 @@ func (m *ProjectListModel) Update(msg tea.Msg) tea.Cmd {
 			m.cursor = 0
 		}
 		m.updateViewportContent()
+		return func() tea.Msg { return StopLoadingMsg{Resource: ResourceProjects} }
 
 	case tea.KeyPressMsg:
 		switch msg.String() {

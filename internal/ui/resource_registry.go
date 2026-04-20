@@ -25,6 +25,7 @@ func newResourceRegistry() *ResourceRegistry {
 					{Key: "q", Label: "Quit"},
 					{Key: "j/k", Label: "Navigate"},
 					{Key: "s/S", Label: "Sort"},
+					{Key: "r", Label: "Refresh"},
 					{Key: "Enter", Label: "Open"},
 					{Key: ":", Label: "Cmd"},
 					{Key: "?", Label: "Help"},
@@ -45,6 +46,7 @@ func newResourceRegistry() *ResourceRegistry {
 						{Key: ":health", Label: "      Toggle HEALTH column"},
 						{Key: "Enter", Label: "     Open selected project sessions"},
 						{Key: "d", Label: "         View selected project details"},
+						{Key: "r", Label: "         Refresh data from disk"},
 						{Key: "/", Label: "         Search projects by name or path"},
 					},
 				}
@@ -101,6 +103,7 @@ func newResourceRegistry() *ResourceRegistry {
 					{Key: "q", Label: "Quit"},
 					{Key: "j/k", Label: "Navigate"},
 					{Key: "s/S", Label: "Sort"},
+					{Key: "r", Label: "Refresh"},
 					{Key: "Enter", Label: "Resume"},
 					{Key: "Space", Label: "Select"},
 					{Key: ":", Label: "Cmd"},
@@ -133,6 +136,7 @@ func newResourceRegistry() *ResourceRegistry {
 						{Key: "Enter", Label: "     Resume selected session"},
 						{Key: "d", Label: "         View session details"},
 						{Key: "l", Label: "         View session log"},
+						{Key: "r", Label: "         Refresh data from disk"},
 						{Key: "/", Label: "         Search sessions or lifecycle states"},
 						{Key: "Esc", Label: "       Go back to projects"},
 						{Key: "Space", Label: "      Toggle select session"},
@@ -222,6 +226,7 @@ func newResourceRegistry() *ResourceRegistry {
 						{Key: ":skills", Label: "    Switch to skills resource"},
 						{Key: "d", Label: "         View selected skill or command details"},
 						{Key: "e", Label: "         Edit selected skill or command"},
+						{Key: "r", Label: "         Refresh data from disk"},
 						{Key: "/", Label: "         Search skills and commands by name, path, scope, status"},
 					},
 				}
@@ -307,6 +312,7 @@ func newResourceRegistry() *ResourceRegistry {
 						{Key: ":agents", Label: "    Switch to agents resource"},
 						{Key: "d", Label: "         View selected agent details"},
 						{Key: "e", Label: "         Edit selected agent file"},
+						{Key: "r", Label: "         Refresh data from disk"},
 						{Key: "/", Label: "         Search agents by name, path, scope, status, config"},
 					},
 				}
@@ -425,6 +431,7 @@ func defaultResourceFooterHints(ctx FooterContext) []KeyHint {
 		{Key: "q", Label: "Quit"},
 		{Key: "j/k", Label: "Navigate"},
 		{Key: "s/S", Label: "Sort"},
+		{Key: "r", Label: "Refresh"},
 		{Key: ":", Label: "Cmd"},
 		{Key: "?", Label: "Help"},
 	}
