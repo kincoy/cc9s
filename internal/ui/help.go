@@ -36,6 +36,8 @@ func buildHelpLines(registry *ResourceRegistry, active ResourceDescriptor) []str
 		"  " + styles.FooterKeyStyle.Render("Ctrl+U") + styles.FooterStyle.Render("   Scroll half-page up"),
 		"  " + styles.FooterKeyStyle.Render("PgDn") + styles.FooterStyle.Render("     Scroll page down"),
 		"  " + styles.FooterKeyStyle.Render("PgUp") + styles.FooterStyle.Render("     Scroll page up"),
+		"  " + styles.FooterKeyStyle.Render("← / →") + styles.FooterStyle.Render("     Switch resource tab"),
+		"  " + styles.FooterKeyStyle.Render("1-4") + styles.FooterStyle.Render("       Switch to resource tab"),
 		"",
 		"  " + styles.HeaderStyle.Render("Sorting"),
 		"  " + styles.FooterKeyStyle.Render("s") + styles.FooterStyle.Render("         Cycle sort field"),
