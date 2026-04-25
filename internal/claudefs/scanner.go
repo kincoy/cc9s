@@ -3,7 +3,6 @@ package claudefs
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,16 +17,8 @@ func ScanProjects() ScanResult {
 		Projects: make([]Project, 0),
 	}
 
-	// Get ~/.claude path
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		result.Err = err
-		return result
-	}
-
-	claudeDir := filepath.Join(homeDir, ".claude")
-	projectsDir := filepath.Join(claudeDir, "projects")
-	activeMarkers := getActiveSessionMarkers(homeDir)
+	projectsDir := ProjectsDir()
+	activeMarkers := getActiveSessionMarkers()
 
 	// Scan project directories
 	projects, totalSessions, activeCount, err := scanProjectsDir(projectsDir, activeMarkers, start)
@@ -224,13 +215,8 @@ func countMarkdownResources(root string) (count int, exists bool) {
 
 // LoadProjectSessions loads all sessions under a project.
 func LoadProjectSessions(projectEncodedPath string) ([]Session, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("get user home dir: %w", err)
-	}
-
 	// Project directory path
-	projectDir := filepath.Join(homeDir, ".claude", "projects", projectEncodedPath)
+	projectDir := filepath.Join(ProjectsDir(), projectEncodedPath)
 
 	// Scan JSONL files
 	entries, err := os.ReadDir(projectDir)
@@ -239,7 +225,7 @@ func LoadProjectSessions(projectEncodedPath string) ([]Session, error) {
 	}
 
 	// Build active session set
-	activeMarkers := getActiveSessionMarkers(homeDir)
+	activeMarkers := getActiveSessionMarkers()
 
 	// Project-level path resolution (no longer reading JSONL per session)
 	projectPath := DecodePathFS(projectEncodedPath)
@@ -308,9 +294,9 @@ type activeSessionInfo struct {
 }
 
 // getActiveSessionMarkers reads all active session marker files keyed by session ID.
-func getActiveSessionMarkers(homeDir string) map[string]activeSessionInfo {
+func getActiveSessionMarkers() map[string]activeSessionInfo {
 	activeMarkers := make(map[string]activeSessionInfo)
-	sessionsDir := filepath.Join(homeDir, ".claude", "sessions")
+	sessionsDir := SessionsDir()
 
 	entries, err := os.ReadDir(sessionsDir)
 	if err != nil {

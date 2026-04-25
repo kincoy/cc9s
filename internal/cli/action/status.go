@@ -10,17 +10,12 @@ import (
 
 // Status computes the aggregate environment overview.
 func Status() (contract.StatusResult, error) {
-	homeDir, err := userHomeDir()
-	if err != nil {
-		return contract.StatusResult{}, statusError("failed to get home directory")
-	}
-
 	scanResult := scanProjects()
 	if scanResult.Err != nil {
 		return contract.StatusResult{}, statusError("scan projects: %v", scanResult.Err)
 	}
 
-	health, err := computeHealthMetrics(homeDir)
+	health, err := computeHealthMetrics()
 	if err != nil {
 		health = claudefs.HealthMetrics{}
 	}

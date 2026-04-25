@@ -509,7 +509,12 @@ func rootHelpLong() string {
 	return `Launch the interactive TUI when no command is provided.
 
 Add --json for machine-readable output.
-Use ` + "`cc9s <resource> --help`" + ` for resource-specific flags and enums.`
+Use ` + "`cc9s <resource> --help`" + ` for resource-specific flags and enums.
+
+Global flags (parsed before subcommands):
+  --theme <name>        Set color theme (or CC9S_THEME env)
+  --claude-dir <path>   Set Claude data directory (or CC9S_CLAUDE_DIR env)
+                        Default: ~/.claude`
 }
 
 func rootHelpExamples() string {

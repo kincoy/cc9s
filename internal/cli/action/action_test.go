@@ -152,14 +152,12 @@ func TestThemesCurrentNameMatchesStyles(t *testing.T) {
 }
 
 func TestStatusSortsTopProjectsBySessionsThenActiveThenName(t *testing.T) {
-	oldHomeDir := userHomeDir
 	oldScanProjects := scanProjects
 	oldLoadProjectSessions := loadProjectSessions
 	oldComputeHealth := computeHealthMetrics
 	oldScanSkills := scanSkills
 	oldScanAgents := scanAgents
 	t.Cleanup(func() {
-		userHomeDir = oldHomeDir
 		scanProjects = oldScanProjects
 		loadProjectSessions = oldLoadProjectSessions
 		computeHealthMetrics = oldComputeHealth
@@ -167,7 +165,6 @@ func TestStatusSortsTopProjectsBySessionsThenActiveThenName(t *testing.T) {
 		scanAgents = oldScanAgents
 	})
 
-	userHomeDir = func() (string, error) { return "/tmp", nil }
 	scanProjects = func() claudefs.ScanResult {
 		return claudefs.ScanResult{
 			Projects: []claudefs.Project{
@@ -178,7 +175,7 @@ func TestStatusSortsTopProjectsBySessionsThenActiveThenName(t *testing.T) {
 		}
 	}
 	loadProjectSessions = func(string) ([]claudefs.Session, error) { return nil, nil }
-	computeHealthMetrics = func(string) (claudefs.HealthMetrics, error) {
+	computeHealthMetrics = func() (claudefs.HealthMetrics, error) {
 		return claudefs.HealthMetrics{}, errors.New("skip health")
 	}
 	scanSkills = func() claudefs.SkillScanResult { return claudefs.SkillScanResult{} }

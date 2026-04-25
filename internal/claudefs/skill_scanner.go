@@ -42,19 +42,14 @@ func ScanSkills() SkillScanResult {
 }
 
 func getSkillDiscoveryRoots() ([]SkillDiscoveryRoot, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-
 	roots := make([]SkillDiscoveryRoot, 0, 4)
 	roots = append(roots, SkillDiscoveryRoot{
-		Path:   filepath.Join(homeDir, ".claude", "skills"),
+		Path:   SkillsDir(),
 		Source: SkillSourceUser,
 		Kind:   SkillKindSkill,
 	})
 	roots = append(roots, SkillDiscoveryRoot{
-		Path:   filepath.Join(homeDir, ".claude", "commands"),
+		Path:   CommandsDir(),
 		Source: SkillSourceUser,
 		Kind:   SkillKindCommand,
 	})
@@ -84,7 +79,7 @@ func getSkillDiscoveryRoots() ([]SkillDiscoveryRoot, error) {
 		})
 	}
 
-	pluginRoots, err := getInstalledPluginDiscoveryRoots(homeDir)
+	pluginRoots, err := getInstalledPluginDiscoveryRoots()
 	if err != nil {
 		return nil, err
 	}
@@ -161,8 +156,8 @@ type installedPluginEntry struct {
 	ProjectPath string `json:"projectPath"`
 }
 
-func getInstalledPluginDiscoveryRoots(homeDir string) ([]SkillDiscoveryRoot, error) {
-	installedPath := filepath.Join(homeDir, ".claude", "plugins", "installed_plugins.json")
+func getInstalledPluginDiscoveryRoots() ([]SkillDiscoveryRoot, error) {
+	installedPath := PluginsInstalledPath()
 	data, err := os.ReadFile(installedPath)
 	if err != nil {
 		if os.IsNotExist(err) {
