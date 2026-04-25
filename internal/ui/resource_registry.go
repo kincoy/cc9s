@@ -24,6 +24,7 @@ func newResourceRegistry() *ResourceRegistry {
 				hints := []KeyHint{
 					{Key: "q", Label: "Quit"},
 					{Key: "j/k", Label: "Navigate"},
+					{Key: "←/→", Label: "Tabs"},
 					{Key: "s/S", Label: "Sort"},
 					{Key: "r", Label: "Refresh"},
 					{Key: "Enter", Label: "Open"},
@@ -103,6 +104,7 @@ func newResourceRegistry() *ResourceRegistry {
 				hints := []KeyHint{
 					{Key: "q", Label: "Quit"},
 					{Key: "j/k", Label: "Navigate"},
+					{Key: "←/→", Label: "Tabs"},
 					{Key: "s/S", Label: "Sort"},
 					{Key: "r", Label: "Refresh"},
 					{Key: "Enter", Label: "Resume"},
@@ -431,6 +433,7 @@ func defaultResourceFooterHints(ctx FooterContext) []KeyHint {
 	hints := []KeyHint{
 		{Key: "q", Label: "Quit"},
 		{Key: "j/k", Label: "Navigate"},
+		{Key: "←/→", Label: "Tabs"},
 		{Key: "s/S", Label: "Sort"},
 		{Key: "r", Label: "Refresh"},
 		{Key: ":", Label: "Cmd"},

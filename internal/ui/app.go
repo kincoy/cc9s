@@ -563,6 +563,18 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			return a, a.refreshCurrentResource()
+		case "left":
+			if a.showHelp {
+				return a, nil
+			}
+			next := a.tabs.PrevResource()
+			return a, func() tea.Msg { return SwitchResourceMsg{Resource: next} }
+		case "right":
+			if a.showHelp {
+				return a, nil
+			}
+			next := a.tabs.NextResource()
+			return a, func() tea.Msg { return SwitchResourceMsg{Resource: next} }
 		}
 	}
 

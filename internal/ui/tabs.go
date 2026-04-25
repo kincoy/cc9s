@@ -29,6 +29,24 @@ func (t *TabsModel) SetCurrent(r ResourceType) {
 	t.current = r
 }
 
+func (t *TabsModel) NextResource() ResourceType {
+	for i, r := range tabResources {
+		if r == t.current {
+			return tabResources[(i+1)%len(tabResources)]
+		}
+	}
+	return t.current
+}
+
+func (t *TabsModel) PrevResource() ResourceType {
+	for i, r := range tabResources {
+		if r == t.current {
+			return tabResources[(i-1+len(tabResources))%len(tabResources)]
+		}
+	}
+	return t.current
+}
+
 // TabsHeight is the vertical space consumed by the tab bar.
 const TabsHeight = 2
 
