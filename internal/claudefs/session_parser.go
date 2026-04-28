@@ -17,13 +17,8 @@ type sessionInspection struct {
 
 // ParseSessionStats parses session statistics (single-pass JSONL traversal).
 func ParseSessionStats(session Session) (*SessionStats, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("get user home dir: %w", err)
-	}
-
 	// Find the JSONL file
-	jsonlPath, err := findSessionJSONL(homeDir, session.ID)
+	jsonlPath, err := findSessionJSONL(session.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -180,8 +175,8 @@ func ParseSessionStats(session Session) (*SessionStats, error) {
 }
 
 // findSessionJSONL locates the JSONL file for a session.
-func findSessionJSONL(homeDir, sessionID string) (string, error) {
-	projectsDir := filepath.Join(homeDir, ".claude", "projects")
+func findSessionJSONL(sessionID string) (string, error) {
+	projectsDir := ProjectsDir()
 	entries, err := os.ReadDir(projectsDir)
 	if err != nil {
 		return "", fmt.Errorf("failed to read projects directory: %w", err)
@@ -207,12 +202,7 @@ func findSessionJSONL(homeDir, sessionID string) (string, error) {
 // limit: number of turns to return
 // Returns: log entries, total turn count, error
 func ParseSessionLog(sessionID string, offset, limit int) ([]LogEntry, int, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, 0, err
-	}
-
-	jsonlPath, err := findSessionJSONL(homeDir, sessionID)
+	jsonlPath, err := findSessionJSONL(sessionID)
 	if err != nil {
 		return nil, 0, err
 	}

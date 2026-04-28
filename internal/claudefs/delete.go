@@ -17,16 +17,11 @@ type DeleteTarget struct {
 
 // DeleteSession deletes a single session (JSONL file + active marker)
 func DeleteSession(target DeleteTarget) error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("get home dir: %w", err)
-	}
-
-	projectDir := filepath.Join(homeDir, ".claude", "projects", target.EncodedPath)
+	projectDir := filepath.Join(ProjectsDir(), target.EncodedPath)
 
 	// Validate path does not escape the allowed directory
 	projectDir = filepath.Clean(projectDir)
-	allowedDir := filepath.Clean(filepath.Join(homeDir, ".claude", "projects"))
+	allowedDir := filepath.Clean(ProjectsDir())
 	if !strings.HasPrefix(projectDir, allowedDir+string(filepath.Separator)) && projectDir != allowedDir {
 		return fmt.Errorf("invalid project path: %s", target.EncodedPath)
 	}
@@ -39,7 +34,7 @@ func DeleteSession(target DeleteTarget) error {
 
 	// Delete matching marker files (including stale markers) when present.
 	if target.HasActiveMarker {
-		markers := getActiveSessionMarkers(homeDir)
+		markers := getActiveSessionMarkers()
 		if marker, ok := markers[target.SessionID]; ok && marker.MarkerPath != "" {
 			if err := os.Remove(marker.MarkerPath); err != nil && !os.IsNotExist(err) {
 				return fmt.Errorf("remove %s: %w", marker.MarkerPath, err)

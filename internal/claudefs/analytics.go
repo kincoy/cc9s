@@ -7,8 +7,7 @@ import (
 )
 
 // ComputeHealthMetrics calculates environment-wide health insights.
-func ComputeHealthMetrics(homeDir string) (HealthMetrics, error) {
-	_ = homeDir
+func ComputeHealthMetrics() (HealthMetrics, error) {
 
 	scanResult := ScanProjects()
 	if scanResult.Err != nil {

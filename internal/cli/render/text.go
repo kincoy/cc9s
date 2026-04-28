@@ -251,6 +251,7 @@ func renderThemesText(r contract.ThemesResult) string {
 	fmt.Fprintln(&buf)
 	fmt.Fprintf(&buf, "Current: %s\n", r.Current)
 	fmt.Fprintln(&buf, "Usage: cc9s --theme <name>  or  CC9S_THEME=<name> cc9s")
+	fmt.Fprintln(&buf, "       cc9s --claude-dir <path>  or  CC9S_CLAUDE_DIR=<path> cc9s")
 	return buf.String()
 }
 

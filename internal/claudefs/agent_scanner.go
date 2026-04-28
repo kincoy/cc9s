@@ -48,14 +48,9 @@ func ScanAgents() AgentScanResult {
 }
 
 func getAgentDiscoveryRoots() ([]AgentDiscoveryRoot, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-
 	roots := make([]AgentDiscoveryRoot, 0, 4)
 	roots = append(roots, AgentDiscoveryRoot{
-		Path:   filepath.Join(homeDir, ".claude", "agents"),
+		Path:   AgentsDir(),
 		Source: AgentSourceUser,
 	})
 
@@ -76,7 +71,7 @@ func getAgentDiscoveryRoots() ([]AgentDiscoveryRoot, error) {
 		})
 	}
 
-	pluginRoots, err := getInstalledAgentDiscoveryRoots(homeDir)
+	pluginRoots, err := getInstalledAgentDiscoveryRoots()
 	if err != nil {
 		return nil, err
 	}
@@ -85,8 +80,8 @@ func getAgentDiscoveryRoots() ([]AgentDiscoveryRoot, error) {
 	return uniqueAgentDiscoveryRoots(roots), nil
 }
 
-func getInstalledAgentDiscoveryRoots(homeDir string) ([]AgentDiscoveryRoot, error) {
-	installedPath := filepath.Join(homeDir, ".claude", "plugins", "installed_plugins.json")
+func getInstalledAgentDiscoveryRoots() ([]AgentDiscoveryRoot, error) {
+	installedPath := PluginsInstalledPath()
 	data, err := os.ReadFile(installedPath)
 	if err != nil {
 		if os.IsNotExist(err) {

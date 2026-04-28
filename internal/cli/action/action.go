@@ -2,7 +2,6 @@ package action
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -13,13 +12,12 @@ import (
 var (
 	scanProjects         = claudefs.ScanProjects
 	loadProjectSessions  = claudefs.LoadProjectSessions
-	computeHealthMetrics = claudefs.ComputeHealthMetrics
+	computeHealthMetrics = func() (claudefs.HealthMetrics, error) { return claudefs.ComputeHealthMetrics() }
 	scanSkills           = claudefs.ScanSkills
 	scanAgents           = claudefs.ScanAgents
 	parseSessionStats    = claudefs.ParseSessionStats
 	quickAssessSession   = claudefs.QuickAssessSession
 	nowFunc              = time.Now
-	userHomeDir          = os.UserHomeDir
 	formatTimeRFC3339    = func(t time.Time) string {
 		if t.IsZero() {
 			return ""

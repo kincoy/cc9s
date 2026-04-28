@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -58,8 +57,6 @@ type AppModel struct {
 	showHelp bool
 	helpScroll int
 	quitting bool
-	homeDir  string
-
 	currentResource      ResourceType
 	globalProjectContext Context // shared project context across Sessions/Skills/Agents
 	inputMode            InputMode
@@ -110,8 +107,6 @@ type AppModel struct {
 
 // NewAppModel creates a new application Model
 func NewAppModel() *AppModel {
-	homeDir, _ := os.UserHomeDir()
-
 	si := textinput.New()
 	si.Prompt = "/"
 	si.Placeholder = "search..."
@@ -128,7 +123,6 @@ func NewAppModel() *AppModel {
 
 	return &AppModel{
 		currentResource:  ResourceProjects,
-		homeDir:          homeDir,
 		projectList:      NewProjectListModel(),
 		resourceRegistry: newResourceRegistry(),
 		searchInput:      si,
@@ -152,9 +146,9 @@ func clockTicker() tea.Cmd {
 	})
 }
 
-func computeHealthCmd(homeDir string) tea.Cmd {
+func computeHealthCmd() tea.Cmd {
 	return func() tea.Msg {
-		health, err := claudefs.ComputeHealthMetrics(homeDir)
+		health, err := claudefs.ComputeHealthMetrics()
 		if err != nil {
 			return StopLoadingMsg{}
 		}
@@ -1305,7 +1299,7 @@ func (a *AppModel) executeCommand(cmdStr string) tea.Cmd {
 			if a.projectList.showHealthColumn && len(a.projectList.projectHealth) == 0 {
 				return tea.Batch(
 					func() tea.Msg { return StartLoadingMsg{Text: "Computing health metrics..."} },
-					computeHealthCmd(a.homeDir),
+					computeHealthCmd(),
 				)
 			}
 		}
