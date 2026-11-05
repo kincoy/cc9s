@@ -14,14 +14,15 @@ import (
 
 // LogViewModel session log view Model
 type LogViewModel struct {
-	session    claudefs.Session      // session object
-	logEntries []claudefs.LogEntry   // log entries (organized by turn)
-	loading    bool                  // whether loading is in progress
-	offset     int                   // current offset
-	hasMore    bool                  // whether more log entries exist
-	viewport   viewport.Model       // viewport for scrolling
-	width      int                   // view width
-	height     int                   // view height
+	session    claudefs.Session    // session object
+	logEntries []claudefs.LogEntry // log entries (organized by turn)
+	loadErr    error               // error from the last log load
+	loading    bool                // whether loading is in progress
+	offset     int                 // current offset
+	hasMore    bool                // whether more log entries exist
+	viewport   viewport.Model      // viewport for scrolling
+	width      int                 // view width
+	height     int                 // view height
 }
 
 // NewLogViewModel creates a new log view Model
@@ -53,6 +54,7 @@ func (m *LogViewModel) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case logLoadedMsg:
 		m.loading = false
+		m.loadErr = msg.err
 		if msg.err != nil {
 			// Error handling: keep empty list
 			m.logEntries = nil
@@ -122,7 +124,7 @@ func (m *LogViewModel) View(width, height int) string {
 
 	// If loading failed
 	if m.logEntries == nil {
-		content := styles.ErrorStyle.Render("Failed to load session log")
+		content := styles.ErrorStyle.Render(m.errorMessage("Failed to load session log"))
 		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, content)
 	}
 
@@ -142,6 +144,14 @@ func (m *LogViewModel) View(width, height int) string {
 	return container
 }
 
+// errorMessage appends the underlying load error to a user-facing message.
+func (m *LogViewModel) errorMessage(prefix string) string {
+	if m.loadErr == nil {
+		return prefix
+	}
+	return fmt.Sprintf("%s: %v", prefix, m.loadErr)
+}
+
 // updateViewportContent renders all log entries and sets viewport content.
 func (m *LogViewModel) updateViewportContent() {
 	if m.loading {
@@ -149,7 +159,7 @@ func (m *LogViewModel) updateViewportContent() {
 		return
 	}
 	if m.logEntries == nil {
-		m.viewport.SetContent(styles.ErrorStyle.Render("Failed to load session log"))
+		m.viewport.SetContent(styles.ErrorStyle.Render(m.errorMessage("Failed to load session log")))
 		return
 	}
 	if len(m.logEntries) == 0 {

@@ -176,6 +176,7 @@ func (SessionListResult) isResult() {}
 // SessionListEntry is one row in sessions list.
 type SessionListEntry struct {
 	ID           string `json:"id"`
+	Name         string `json:"name"`
 	Project      string `json:"project"`
 	State        string `json:"state"`
 	LastActiveAt string `json:"last_active_at"`
@@ -192,6 +193,7 @@ func (SessionDetailResult) isResult() {}
 // SessionDetail is the full projection for sessions inspect.
 type SessionDetail struct {
 	ID        string                 `json:"id"`
+	Name      string                 `json:"name"`
 	Project   string                 `json:"project"`
 	Path      string                 `json:"path"`
 	Summary   string                 `json:"summary"`

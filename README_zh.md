@@ -38,6 +38,7 @@ cc9s 提供了一个全屏终端 UI（灵感来自 [k9s](https://github.com/dera
 - **双层导航** — Projects → Sessions，`Enter` 进入，`Esc` 返回
 - **项目总览** — 在项目层看到本地 session、skill、command、agent 摘要，并通过 `d` 查看项目路径和本地 Claude roots
 - **会话恢复** — 直接从 TUI 启动对应的 Claude Code 会话
+- **会话名称** — 在会话 ID 旁展示自定义/AI 生成的会话标题，并支持按名称搜索和排序
 - **搜索与过滤** — `/` 搜索，`:context <name>` 按项目过滤
 - **多选批量删除** — `Space` 选中，`x` 批量删除
 - **会话详情** — 查看会话统计、摘要和工具调用日志

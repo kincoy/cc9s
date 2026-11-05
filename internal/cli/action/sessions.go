@@ -39,6 +39,7 @@ func SessionsList(opts contract.SessionListOptions) (contract.SessionListResult,
 
 			allSessions = append(allSessions, contract.SessionListEntry{
 				ID:           s.ID,
+				Name:         s.Name,
 				Project:      project.Name,
 				State:        string(s.Lifecycle.State),
 				LastActiveAt: formatTimeRFC3339(s.LastActiveAt),
@@ -102,6 +103,7 @@ func SessionInspect(opts contract.SessionInspectOptions) (contract.SessionDetail
 	return contract.SessionDetailResult{
 		SessionDetail: contract.SessionDetail{
 			ID:      found.ID,
+			Name:    found.Name,
 			Project: projectName,
 			Path:    found.ProjectPath,
 			Summary: found.Summary,
@@ -264,6 +266,15 @@ func sortSessionEntries(entries []contract.SessionListEntry, field string) []con
 				return sorted[i].LastActiveAt > sorted[j].LastActiveAt
 			}
 			return strings.ToLower(sorted[i].State) < strings.ToLower(sorted[j].State)
+		})
+	case "name":
+		sort.Slice(sorted, func(i, j int) bool {
+			ni := strings.ToLower(sorted[i].Name)
+			nj := strings.ToLower(sorted[j].Name)
+			if ni == nj {
+				return sorted[i].LastActiveAt > sorted[j].LastActiveAt
+			}
+			return ni < nj
 		})
 	case "project":
 		sort.Slice(sorted, func(i, j int) bool {
