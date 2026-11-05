@@ -38,6 +38,7 @@ One common flow:
 - **Two-level navigation** — Projects → Sessions, drill down with `Enter`, go back with `Esc`
 - **Project overview** — See local project session, skill, command, and agent summaries, then inspect project paths and local Claude roots with `d`
 - **Session resume** — Jump directly into a Claude Code session from the TUI
+- **Session names** — Show each session's custom/AI-generated title next to its ID, and search or sort by name
 - **Search & filter** — `/` to search, `:context <name>` to filter by project
 - **Batch delete** — `Space` to select, `x` to delete multiple sessions
 - **Session details** — View session stats, summary, and tool call logs

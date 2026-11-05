@@ -405,6 +405,9 @@ func LifecycleStateMatchesQuery(state SessionLifecycleState, query string) bool 
 	}
 
 	stateTerm := strings.ToLower(string(state))
+	if stateTerm == "" {
+		return false
+	}
 	return strings.Contains(stateTerm, q) || strings.Contains(q, stateTerm)
 }
 

@@ -17,6 +17,7 @@ import (
 type DetailViewModel struct {
 	session    claudefs.Session       // session object
 	stats      *claudefs.SessionStats // stats data (loaded async)
+	loadErr    error                  // error from the last stats load
 	loading    bool                   // whether loading is in progress
 	width      int                    // panel width
 	height     int                    // panel height
@@ -53,6 +54,7 @@ func (m *DetailViewModel) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case statsLoadedMsg:
 		m.loading = false
+		m.loadErr = msg.err
 		if msg.err != nil {
 			// Error handling: keep stats as nil
 			m.stats = nil
@@ -125,7 +127,11 @@ func (m *DetailViewModel) ViewBox(width int) string {
 
 	// If loading failed
 	if m.stats == nil {
-		content := styles.ErrorStyle.Render("Failed to load session details")
+		message := "Failed to load session details"
+		if m.loadErr != nil {
+			message = truncateSummary(fmt.Sprintf("%s: %v", message, m.loadErr), panelWidth-6)
+		}
+		content := styles.ErrorStyle.Render(message)
 		return lipgloss.NewStyle().
 			Width(panelWidth).
 			Padding(1, 2).
@@ -235,7 +241,9 @@ func (m *DetailViewModel) renderMetadata() string {
 	lines = append(lines, styles.DetailSectionStyle.Render("Metadata"))
 	lines = append(lines, m.renderField("Session ID", m.session.ID))
 
-	if m.stats.CustomTitle != "" {
+	if m.session.Name != "" {
+		lines = append(lines, m.renderField("Name", m.session.Name))
+	} else if m.stats.CustomTitle != "" {
 		lines = append(lines, m.renderField("Title", m.stats.CustomTitle))
 	}
 	lines = append(lines, m.renderField("Model", m.stats.Model))

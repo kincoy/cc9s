@@ -123,11 +123,12 @@ func renderSessionListText(r contract.SessionListResult) string {
 	fmt.Fprintf(&buf, "Sessions (%d)\n\n", len(r.Sessions))
 
 	tw := tabwriter.NewWriter(&buf, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tPROJECT\tSTATE\tLAST ACTIVE\tSUMMARY")
+	fmt.Fprintln(tw, "ID\tNAME\tPROJECT\tSTATE\tLAST ACTIVE\tSUMMARY")
 	for _, s := range r.Sessions {
+		name := truncateText(s.Name, 30)
 		summary := truncateText(s.Summary, 50)
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
-			s.ID, s.Project, s.State, s.LastActiveAt, summary)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			s.ID, name, s.Project, s.State, s.LastActiveAt, summary)
 	}
 	_ = tw.Flush()
 	return buf.String()
@@ -137,6 +138,9 @@ func renderSessionDetailText(r contract.SessionDetailResult) string {
 	d := r.SessionDetail
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "Session: %s\n", d.ID)
+	if d.Name != "" {
+		fmt.Fprintf(&buf, "  Name:    %s\n", d.Name)
+	}
 	fmt.Fprintf(&buf, "  Project: %s\n", d.Project)
 	fmt.Fprintf(&buf, "  Path:    %s\n", d.Path)
 	if d.Summary != "" {

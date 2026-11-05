@@ -20,9 +20,13 @@ type SessionSortField int
 const (
 	SortBySessionActivity SessionSortField = iota
 	SortBySessionID
+	SortBySessionName
 	SortByEventCount
 	SortBySessionSize
 )
+
+// sessionSortFieldCount is the number of cycleable sort fields.
+const sessionSortFieldCount = int(SortBySessionSize) + 1
 
 // SessionListModel session list view Model (unified, supports context filtering)
 type SessionListModel struct {
@@ -213,7 +217,7 @@ func (m *SessionListModel) Update(msg tea.Msg) tea.Cmd {
 
 		// Sort shortcuts
 		case "s":
-			m.sortBy = (m.sortBy + 1) % 4
+			m.sortBy = (m.sortBy + 1) % SessionSortField(sessionSortFieldCount)
 			m.sortGlobalSessions(m.allSessions)
 			m.applyContext()
 			m.updateViewportContent()
@@ -489,6 +493,9 @@ func (m *SessionListModel) matchesFilter(gs claudefs.GlobalSession, q string) bo
 	if strings.Contains(strings.ToLower(s.ID), q) {
 		return true
 	}
+	if strings.Contains(strings.ToLower(s.Name), q) {
+		return true
+	}
 	if strings.Contains(strings.ToLower(gs.ProjectName), q) {
 		return true
 	}
@@ -582,6 +589,8 @@ func (m *SessionListModel) sortGlobalSessions(sessions []claudefs.GlobalSession)
 			less = sessions[i].Session.LastActiveAt.Before(sessions[j].Session.LastActiveAt)
 		case SortBySessionID:
 			less = sessions[i].Session.ID < sessions[j].Session.ID
+		case SortBySessionName:
+			less = strings.ToLower(sessions[i].Session.Name) < strings.ToLower(sessions[j].Session.Name)
 		case SortByEventCount:
 			less = sessions[i].Session.EventCount < sessions[j].Session.EventCount
 		case SortBySessionSize:

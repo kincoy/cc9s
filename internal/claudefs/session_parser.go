@@ -4,11 +4,29 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 )
+
+// sessionTitleTailBytes is how much of the end of a session file is scanned for
+// title events. Titles are re-emitted near the end of the file, so reading the
+// tail avoids scanning multi-megabyte transcripts on every list refresh.
+const sessionTitleTailBytes = 64 * 1024
+
+// sessionJSONLMaxLineBytes is the largest single JSONL line we accept. Tool
+// results routinely exceed bufio.Scanner's 64 KiB default token size.
+const sessionJSONLMaxLineBytes = 64 * 1024 * 1024
+
+// newSessionScanner returns a JSONL scanner that tolerates long transcript lines.
+func newSessionScanner(r io.Reader) *bufio.Scanner {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), sessionJSONLMaxLineBytes)
+	return scanner
+}
 
 type sessionInspection struct {
 	Summary string
@@ -40,7 +58,7 @@ func ParseSessionStats(session Session) (*SessionStats, error) {
 		ToolUsage: make(map[string]int),
 	}
 
-	scanner := bufio.NewScanner(file)
+	scanner := newSessionScanner(file)
 	firstTimestamp := true
 
 	for scanner.Scan() {
@@ -228,7 +246,7 @@ func ParseSessionLog(sessionID string, offset, limit int) ([]LogEntry, int, erro
 	currentTurn := &LogEntry{TurnNumber: 0}
 	turnStarted := false
 
-	scanner := bufio.NewScanner(file)
+	scanner := newSessionScanner(file)
 	for scanner.Scan() {
 		var event map[string]interface{}
 		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
@@ -385,8 +403,7 @@ func inspectSessionFile(filePath string) sessionInspection {
 	}
 	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+	scanner := newSessionScanner(file)
 
 	totalLines := 0
 	parsedLines := 0
@@ -454,6 +471,91 @@ func inspectSessionFile(filePath string) sessionInspection {
 // ExtractSessionSummary extracts the first user message from a JSONL file as the session summary.
 func ExtractSessionSummary(filePath string) string {
 	return inspectSessionFile(filePath).Summary
+}
+
+// SessionTitles holds the title events found in a session transcript.
+type SessionTitles struct {
+	CustomTitle string // Set by the user via /rename (custom-title event)
+	AgentName   string // Resolved agent name (agent-name event)
+	AITitle     string // AI-generated title (ai-title event)
+}
+
+// DisplayName resolves the user-facing session name.
+// Precedence: user rename > agent name > AI-generated title.
+func (t SessionTitles) DisplayName() string {
+	if t.CustomTitle != "" {
+		return t.CustomTitle
+	}
+	if t.AgentName != "" {
+		return t.AgentName
+	}
+	return t.AITitle
+}
+
+// ExtractSessionTitles returns the latest title events from the tail of a session file.
+func ExtractSessionTitles(filePath string) SessionTitles {
+	var titles SessionTitles
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return titles
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return titles
+	}
+
+	offset := info.Size() - sessionTitleTailBytes
+	if offset < 0 {
+		offset = 0
+	}
+	if _, err := file.Seek(offset, io.SeekStart); err != nil {
+		return titles
+	}
+
+	scanner := newSessionScanner(file)
+
+	for scanner.Scan() {
+		var event map[string]interface{}
+		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
+			// Skip the partial line at the start of the tail window.
+			continue
+		}
+
+		switch event["type"] {
+		case "custom-title":
+			if v := cleanTitle(event["customTitle"]); v != "" {
+				titles.CustomTitle = v
+			}
+		case "agent-name":
+			if v := cleanTitle(event["agentName"]); v != "" {
+				titles.AgentName = v
+			}
+		case "ai-title":
+			if v := cleanTitle(event["aiTitle"]); v != "" {
+				titles.AITitle = v
+			}
+		}
+	}
+
+	return titles
+}
+
+// cleanTitle normalizes a title value: drops control characters and collapses whitespace.
+func cleanTitle(value interface{}) string {
+	s, ok := value.(string)
+	if !ok {
+		return ""
+	}
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) && !unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, s)
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // cleanSummary cleans summary text: removes newlines and extra spaces (does not truncate, UI layer handles that)

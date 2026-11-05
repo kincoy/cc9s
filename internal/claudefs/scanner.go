@@ -1,7 +1,6 @@
 package claudefs
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -266,6 +265,7 @@ func LoadProjectSessions(projectEncodedPath string) ([]Session, error) {
 		}
 
 		inspection := inspectSessionFile(filePath)
+		titles := ExtractSessionTitles(filePath)
 		hasMarker := hasActiveMarker(activeMarkers, sessionID)
 		lifecycle := ClassifySessionLifecycle(info.ModTime(), hasMarker, inspection.Health, now, DefaultActivityWindow)
 
@@ -287,6 +287,7 @@ func LoadProjectSessions(projectEncodedPath string) ([]Session, error) {
 			IsActive:        lifecycle.State == SessionLifecycleActive,
 			Lifecycle:       lifecycle,
 			Summary:         inspection.Summary,
+			Name:            titles.DisplayName(),
 		})
 	}
 
@@ -376,8 +377,7 @@ func extractCwdFromSession(filePath string) string {
 	defer file.Close()
 
 	// Only read the first line
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+	scanner := newSessionScanner(file)
 	if !scanner.Scan() {
 		return ""
 	}

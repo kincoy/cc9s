@@ -40,45 +40,66 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 	// === Content area ===
 	contentWidth := width - 4
 
-	// 80x24 adaptive - hide EVENTS and SIZE columns on narrow screens
-	showEventsAndSize := width >= 100
+	// Narrow screens drop optional columns so the remaining cells stay readable.
+	showProject := showProjectColumn && width >= 90
 
 	// Column width allocation (SUMMARY is the flexible column)
 	projectWidth := 0
-	if showProjectColumn {
+	if showProject {
 		projectWidth = 20
 	}
 
 	idWidth := 12
+	nameWidth := 18
+	if width < 110 {
+		nameWidth = 14
+	}
+	if width < 90 {
+		nameWidth = 10
+	}
+	const minNameWidth = 10
+
 	statusWidth := 13
 	recommendWidth := 10
 	lastActiveWidth := 14
 	eventsWidth := 8
 	sizeWidth := 10
+	const minSummaryWidth = 10
 
-	colCount := 4 // ID, SUMMARY, STATUS, LAST ACTIVE
-	if showProjectColumn {
+	colCount := 5 // ID, NAME, SUMMARY, STATUS, LAST ACTIVE
+	fixedWidth := projectWidth + idWidth + nameWidth + statusWidth + lastActiveWidth
+	if showProject {
 		colCount++
 	}
 	if showCleanupHints {
 		colCount++
-	}
-	if showEventsAndSize {
-		colCount += 2
+		fixedWidth += recommendWidth
 	}
 	sepCount := colCount - 1
 
-	fixedWidth := projectWidth + idWidth + statusWidth + lastActiveWidth
-	if showCleanupHints {
-		fixedWidth += recommendWidth
-	}
-	if showEventsAndSize {
-		fixedWidth += eventsWidth + sizeWidth
+	// Shrink NAME before letting SUMMARY fall below its minimum width.
+	summaryWidth := contentWidth - fixedWidth - (sepCount * 2)
+	if summaryWidth < minSummaryWidth && nameWidth > minNameWidth {
+		shrink := minSummaryWidth - summaryWidth
+		if maxShrink := nameWidth - minNameWidth; shrink > maxShrink {
+			shrink = maxShrink
+		}
+		nameWidth -= shrink
+		fixedWidth -= shrink
+		summaryWidth = contentWidth - fixedWidth - (sepCount * 2)
 	}
 
-	summaryWidth := contentWidth - fixedWidth - (sepCount * 2)
-	if summaryWidth < 10 {
-		summaryWidth = 10
+	// Only show EVENTS and SIZE when SUMMARY still has usable room.
+	showEventsAndSize := contentWidth-fixedWidth-eventsWidth-sizeWidth-((sepCount+2)*2) >= minSummaryWidth+2
+	if showEventsAndSize {
+		colCount += 2
+		fixedWidth += eventsWidth + sizeWidth
+		sepCount = colCount - 1
+	}
+
+	summaryWidth = contentWidth - fixedWidth - (sepCount * 2)
+	if summaryWidth < minSummaryWidth {
+		summaryWidth = minSummaryWidth
 	}
 
 	// === Header row ===
@@ -93,8 +114,9 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 	}
 
 	allCols := []headerCol{
-		{"PROJECT", projectWidth, lipgloss.Left, -1, showProjectColumn},
+		{"PROJECT", projectWidth, lipgloss.Left, -1, showProject},
 		{"SESSION ID", idWidth, lipgloss.Left, SortBySessionID, true},
+		{"NAME", nameWidth, lipgloss.Left, SortBySessionName, true},
 		{"SUMMARY", summaryWidth, lipgloss.Left, -1, true},
 		{"STATUS", statusWidth, lipgloss.Left, -1, true},
 		{"RECOMMEND", recommendWidth, lipgloss.Left, -1, showCleanupHints},
@@ -161,7 +183,7 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 
 		// Format project name (truncate if too long for column)
 		projectName := gs.ProjectName
-		if showProjectColumn && utf8.RuneCountInString(projectName) > projectWidth {
+		if showProject && projectWidth > 3 && utf8.RuneCountInString(projectName) > projectWidth {
 			projectName = string([]rune(projectName)[:projectWidth-3]) + "..."
 		}
 
@@ -176,17 +198,28 @@ func renderSessionTable(sessions []claudefs.GlobalSession, cursor, width, height
 			summaryText = lipgloss.NewStyle().Strikethrough(true).Render(summaryText)
 		}
 
+		nameText := gs.Session.Name
+		if nameText == "" {
+			nameText = "-"
+		}
+		// Apply strikethrough to name for Stale sessions
+		if isStale {
+			nameText = lipgloss.NewStyle().Strikethrough(true).Render(nameText)
+		}
+
 		var rowParts []string
-		if showProjectColumn {
+		if showProject {
 			rowParts = append(rowParts,
 				rowStyle.Width(projectWidth).Render(projectName), rowSep,
 				rowStyle.Width(idWidth).Render(sessionID), rowSep,
+				rowStyle.Width(nameWidth).Render(truncateSummary(nameText, nameWidth)), rowSep,
 				rowStyle.Width(summaryWidth).Render(truncateSummary(summaryText, summaryWidth)), rowSep,
 				statusStyle.Inherit(rowStyle).Width(statusWidth).Render(statusText),
 			)
 		} else {
 			rowParts = append(rowParts,
 				rowStyle.Width(idWidth).Render(sessionID), rowSep,
+				rowStyle.Width(nameWidth).Render(truncateSummary(nameText, nameWidth)), rowSep,
 				rowStyle.Width(summaryWidth).Render(truncateSummary(summaryText, summaryWidth)), rowSep,
 				statusStyle.Inherit(rowStyle).Width(statusWidth).Render(statusText),
 			)

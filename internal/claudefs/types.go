@@ -63,6 +63,7 @@ type Session struct {
 	IsActive        bool                     // Whether the session is currently active under lifecycle rules
 	Lifecycle       SessionLifecycleSnapshot // Shared lifecycle snapshot for all session-facing surfaces
 	Summary         string                   // Session summary (first 80 chars of the first user message)
+	Name            string                   // Session display name (custom title > agent name > AI title)
 }
 
 // ScanResult holds the results of a project scan.

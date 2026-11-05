@@ -206,6 +206,74 @@ func TestSessionListViewShowsCleanupHintsColumn(t *testing.T) {
 	}
 }
 
+func TestSessionListSearchByName(t *testing.T) {
+	model := &SessionListModel{}
+	model.contextSessions = []claudefs.GlobalSession{
+		{ProjectName: "demo", Session: claudefs.Session{ID: "s-001", Name: "邮件二期"}},
+		{ProjectName: "demo", Session: claudefs.Session{ID: "s-002", Name: "收入认领三期"}},
+	}
+
+	model.ApplyFilter("邮件")
+	if len(model.sessions) != 1 || model.sessions[0].Session.ID != "s-001" {
+		t.Fatalf("name search mismatch: %+v", model.sessions)
+	}
+
+	model.ApplyFilter("认领")
+	if len(model.sessions) != 1 || model.sessions[0].Session.ID != "s-002" {
+		t.Fatalf("name search mismatch: %+v", model.sessions)
+	}
+}
+
+func TestSessionListSortByName(t *testing.T) {
+	model := &SessionListModel{sortBy: SortBySessionName, sortAsc: true}
+	sessions := []claudefs.GlobalSession{
+		{Session: claudefs.Session{ID: "b", Name: "zeta"}},
+		{Session: claudefs.Session{ID: "a", Name: "Alpha"}},
+		{Session: claudefs.Session{ID: "c", Name: "beta"}},
+	}
+
+	model.sortGlobalSessions(sessions)
+
+	want := []string{"Alpha", "beta", "zeta"}
+	for i, name := range want {
+		if sessions[i].Session.Name != name {
+			t.Fatalf("position %d = %q, want %q", i, sessions[i].Session.Name, name)
+		}
+	}
+}
+
+func TestSessionListViewShowsNameColumn(t *testing.T) {
+	model := &SessionListModel{
+		context: Context{Type: ContextProject, Value: "demo"},
+		sessions: []claudefs.GlobalSession{
+			{
+				ProjectName: "demo",
+				Session: claudefs.Session{
+					ID:           "d39f7a9f-327f-49fb-8c90-c653e193fa79",
+					Name:         "邮件二期",
+					Summary:      "implement the full authentication system with JWT tokens",
+					LastActiveAt: time.Now(),
+					EventCount:   12,
+					FileSize:     2048,
+					Lifecycle: claudefs.SessionLifecycleSnapshot{
+						State: claudefs.SessionLifecycleCompleted,
+					},
+				},
+			},
+		},
+	}
+	model.contextSessions = model.sessions
+	model.viewport = NewViewportWithSize(140, 12)
+	model.updateViewportContent()
+
+	out := model.View(140, 12)
+	for _, want := range []string{"SESSION ID", "NAME", "邮件二期"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("session list output missing %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestSessionListRecommendationSearch(t *testing.T) {
 	model := &SessionListModel{}
 	sessions := []claudefs.GlobalSession{
